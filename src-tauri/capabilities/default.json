@@ -1,0 +1,24 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/schema/desktop-schema.json",
+  "identifier": "default",
+  "description": "Default SENU capabilities",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "dialog:allow-open",
+    "dialog:allow-save",
+    "fs:allow-read-text-file",
+    "fs:allow-write-text-file",
+    "fs:allow-read-dir",
+    "fs:allow-exists",
+    "fs:scope-home-recursive",
+    "fs:scope-download-recursive",
+    "fs:allow-home-read-recursive",
+    "fs:allow-download-write",
+    "store:allow-get",
+    "store:allow-set",
+    "store:allow-save",
+    "store:allow-load",
+    "shell:allow-open"
+  ]
+}

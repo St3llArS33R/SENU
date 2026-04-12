@@ -1,0 +1,26 @@
+# Node
+node_modules/
+dist/
+.vite/
+
+# Tauri
+src-tauri/target/
+src-tauri/WixTools/
+
+# Env / secrets
+.env
+.env.local
+*.pem
+*.key
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+senu-logs/
+
+# Editor
+.vscode/settings.json
+.idea/

@@ -1,0 +1,80 @@
+[package]
+name = "senu"
+version = "0.1.0"
+description = "SENU — Premium SSH terminal for security professionals"
+authors = ["SENU"]
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "senu_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "senu"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["macos-private-api"] }
+tauri-plugin-store = "2"
+tauri-plugin-shell = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-fs = "2"
+
+# SSH
+russh = "0.44"
+russh-keys = "0.44"
+russh-sftp = "2"
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# UUID for session IDs
+uuid = { version = "1", features = ["v4"] }
+
+# Credentials / keychain
+keyring = "3"
+zeroize = { version = "1", features = ["derive"] }
+
+# Crypto (for vault AES-256-GCM)
+aes-gcm = "0.10"
+argon2 = "0.5"
+rand = "0.8"
+
+# Error handling
+anyhow = "1"
+thiserror = "1"
+
+# SSH key scanning
+dirs = "5"
+
+# Logging
+log = "0.4"
+env_logger = "0.11"
+
+# Async trait
+async-trait = "0.1"
+
+# bytes
+bytes = "1"
+
+# Shell expansion (~/ paths)
+shellexpand = "3"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.dev]
+opt-level = 0
+debug = true
