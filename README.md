@@ -3,7 +3,7 @@
 > Modern SSH terminal built with Tauri 2 + React + TypeScript
 
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
+![License](https://img.shields.io/badge/license-Proprietary-red)
 ![Stack](https://img.shields.io/badge/stack-Tauri%202%20%2B%20Rust%20%2B%20React-purple)
 
 ## Features
