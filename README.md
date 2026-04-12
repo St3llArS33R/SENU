@@ -1,30 +1,53 @@
-# React + TypeScript + Vite
+# SENU
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+> Modern SSH terminal built with Tauri 2 + React + TypeScript
 
-Currently, two official plugins are available:
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+![Stack](https://img.shields.io/badge/stack-Tauri%202%20%2B%20Rust%20%2B%20React-purple)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Features
 
-## Expanding the ESLint configuration
+- **SSH connections** — password, private key, SSH agent
+- **ProxyJump** — connect through jump hosts
+- **Split pane** — 2, 4, 6 or 8 terminals side by side
+- **SFTP** — browse, upload and download files
+- **Groups** — organize connections by color-coded groups
+- **Quick Connect** — `⚡` button or `Ctrl+L` for instant connections
+- **SSH key generation** — Ed25519 and RSA 4096 directly in the app
+- **Session logging** — record terminal output to a file
+- **Credential vault** — passwords stored in system keychain (Windows Credential Manager / macOS Keychain / libsecret)
+- **Known hosts** — host key verification with fingerprint display
+- **Auto-reconnect** — exponential backoff with up to 5 retry attempts
+- **Fuzzy search** — command palette for quick server lookup
+- **Snippets & Notes** — per-server notes and reusable command snippets
+- **128K scrollback** — never lose terminal history
 
-If you are developing a production application, we recommend updating the configuration to enable type aware lint rules:
+## Stack
 
-- Configure the top-level `parserOptions` property like this:
+| Layer | Technology |
+|-------|-----------|
+| Shell | Rust + [russh](https://github.com/warp-tech/russh) |
+| UI | React + TypeScript + xterm.js |
+| Desktop | Tauri 2 |
+| Storage | tauri-plugin-store |
+| Vault | keyring crate |
 
-```js
-export default {
-  // other rules...
-  parserOptions: {
-    ecmaVersion: 'latest',
-    sourceType: 'module',
-    project: ['./tsconfig.json', './tsconfig.node.json'],
-    tsconfigRootDir: __dirname,
-  },
-}
+## Building
+
+```bash
+# Install dependencies
+npm install
+
+# Dev mode
+npm run tauri dev
+
+# Production build
+npm run tauri build
 ```
 
-- Replace `plugin:@typescript-eslint/recommended` to `plugin:@typescript-eslint/recommended-type-checked` or `plugin:@typescript-eslint/strict-type-checked`
-- Optionally add `plugin:@typescript-eslint/stylistic-type-checked`
-- Install [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react) and add `plugin:react/recommended` & `plugin:react/jsx-runtime` to the `extends` list
+**Requirements:** Rust 1.75+, Node 18+, platform build tools (see [Tauri prerequisites](https://tauri.app/start/prerequisites/))
+
+## License
+
+MIT
