@@ -7,6 +7,7 @@ import './App.css'
 // Must be imported before reading window.nextterm below — this ensures bridge.ts
 // evaluates (and sets window.nextterm = bridge) before the module-level const nt.
 import './bridge'
+import { LangContext, useLangState, useLanguage } from './i18n'
 
 // ── Flat SVG Icons ─────────────────────────────────────────────────────────
 const Ico = {
@@ -236,6 +237,7 @@ function Toast({ message, type }: { message: string; type: 'success' | 'error' }
 function ConfirmModal({ message, onConfirm, onCancel }: {
   message: string; onConfirm: () => void; onCancel: () => void
 }) {
+  const { t } = useLanguage()
   return (
     <div className="modal-overlay" onClick={onCancel}>
       <div className="modal confirm-modal" onClick={e => e.stopPropagation()}>
@@ -243,7 +245,7 @@ function ConfirmModal({ message, onConfirm, onCancel }: {
           <p className="confirm-message">{message}</p>
         </div>
         <div className="modal-footer">
-          <button className="btn-secondary" onClick={onCancel}>Cancel</button>
+          <button className="btn-secondary" onClick={onCancel}>{t('cancel')}</button>
           <button className="btn-primary" onClick={onConfirm}>Confirm</button>
         </div>
       </div>
@@ -373,6 +375,7 @@ function ShortcutsModal({ onClose }: { onClose: () => void }) {
 
 // --- Status Bar ---
 function StatusBar({ tab }: { tab: Tab | null }) {
+  const { t, lang, setLang } = useLanguage()
   const [uptime, setUptime] = useState('')
 
   useEffect(() => {
@@ -394,10 +397,18 @@ function StatusBar({ tab }: { tab: Tab | null }) {
     error: 'var(--red)', disconnected: 'var(--text3)',
   }
 
+  const statusLabel = (status: string) => {
+    if (status === 'connected') return t('statusConnected')
+    if (status === 'connecting') return t('statusConnecting')
+    if (status === 'disconnected') return t('statusDisconnected')
+    if (status === 'error') return t('statusError')
+    return status.toUpperCase()
+  }
+
   return (
     <div className="status-bar">
       {!tab ? (
-        <span className="status-item status-dim">No active connection</span>
+        <span className="status-item status-dim">{t('noActiveConnection')}</span>
       ) : (
         <>
           <span className="status-dot" style={{ background: statusColors[tab.status] || 'var(--text3)' }} />
@@ -414,10 +425,19 @@ function StatusBar({ tab }: { tab: Tab | null }) {
           )}
           <div className="status-spacer" />
           <span className="status-item status-dim" style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 11 }}>
-            {tab.status === 'connected' ? 'SSH · xterm-256color' : tab.status.toUpperCase()}
+            {tab.status === 'connected' ? 'SSH · xterm-256color' : statusLabel(tab.status)}
           </span>
         </>
       )}
+      {/* Language toggle — always visible on the right */}
+      <div className="status-spacer" />
+      <button
+        className="status-lang-btn"
+        onClick={() => setLang(lang === 'en' ? 'uk' : 'en')}
+        title={lang === 'en' ? 'Switch to Ukrainian' : 'Перемкнути на English'}
+      >
+        {t('langToggle')}
+      </button>
     </div>
   )
 }
@@ -499,6 +519,7 @@ function SshKeyPicker({
   onChange: (path: string) => void
   onEncryptedChange?: (encrypted: boolean) => void
 }) {
+  const { t } = useLanguage()
   const [keys, setKeys] = useState<SshKey[]>([])
   const [loading, setLoading] = useState(true)
   const [warning, setWarning] = useState('')
@@ -562,11 +583,11 @@ function SshKeyPicker({
         <button className="btn-secondary btn-key-browse" onClick={browse}>
           {Ico.folder(13)} {value
             ? `${filename}${selectedKey?.encrypted ? ' (passphrase)' : ''}`
-            : 'Обрати файл ключа…'}
+            : t('chooseKeyFile')}
         </button>
         {value && <button className="btn-clear-key" onClick={() => { onChange(''); setWarning(''); onEncryptedChange?.(false) }}>✕</button>}
         <button className="btn-secondary btn-genkey" onClick={() => { setGenerating(v => !v); setGenResult(null) }}>
-          ✦ Generate
+          {t('generateKey')}
         </button>
       </div>
 
@@ -574,37 +595,37 @@ function SshKeyPicker({
       {generating && (
         <div className="keygen-panel">
           <div className="keygen-row">
-            <label>Type</label>
+            <label>{t('keyType')}</label>
             <select value={genForm.type} onChange={e => {
               const t = e.target.value as 'ed25519' | 'rsa'
               setGenForm(f => ({ ...f, type: t, name: t === 'rsa' ? 'id_rsa' : 'id_ed25519' }))
             }}>
-              <option value="ed25519">Ed25519 (recommended)</option>
-              <option value="rsa">RSA 4096</option>
+              <option value="ed25519">{t('keyTypeEd25519')}</option>
+              <option value="rsa">{t('keyTypeRsa')}</option>
             </select>
           </div>
           <div className="keygen-row">
-            <label>Filename</label>
+            <label>{t('keyFilename')}</label>
             <input value={genForm.name} onChange={e => setGenForm(f => ({ ...f, name: e.target.value }))} placeholder="id_ed25519" />
           </div>
           <div className="keygen-row">
-            <label>Passphrase</label>
-            <input type="password" value={genForm.passphrase} onChange={e => setGenForm(f => ({ ...f, passphrase: e.target.value }))} placeholder="(optional)" />
+            <label>{t('keyPassphrase')}</label>
+            <input type="password" value={genForm.passphrase} onChange={e => setGenForm(f => ({ ...f, passphrase: e.target.value }))} placeholder={t('optional')} />
           </div>
           <button className="btn-primary btn-genkey-run" onClick={async () => {
             try {
               const res = await nt?.generateSshKey(genForm.type, genForm.name, genForm.passphrase || undefined)
               if (res) {
-                setGenResult(`✓ Generated: ${res.private_path}`)
+                setGenResult(`${t('keyGenerated')}${res.private_path}`)
                 onChange(res.private_path)
                 onEncryptedChange?.(!!genForm.passphrase)
                 reloadKeys()
                 setGenerating(false)
               }
             } catch (e: unknown) {
-              setGenResult(`✗ Error: ${e instanceof Error ? e.message : String(e)}`)
+              setGenResult(`${t('keyGenError')}${e instanceof Error ? e.message : String(e)}`)
             }
-          }}>Generate key pair</button>
+          }}>{t('generateKeyPair')}</button>
           {genResult && <div className={`keygen-result ${genResult.startsWith('✓') ? 'ok' : 'err'}`}>{genResult}</div>}
         </div>
       )}
@@ -622,6 +643,7 @@ function ServerModal({
   onSave: (s: Server, connect: boolean) => void
   onClose: () => void
 }) {
+  const { t } = useLanguage()
   const isEdit = !!existing
   const initMode = existing?.useAgent ? 'agent' : existing?.privateKeyPath ? 'key' : 'password'
   const [form, setForm] = useState({
@@ -680,43 +702,43 @@ function ServerModal({
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <span>{isEdit ? 'Edit Connection' : 'New Connection'}</span>
+          <span>{isEdit ? t('editConnection') : t('newConnection2')}</span>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <div className="modal-body">
-          <label>Name</label>
-          <input placeholder="My Server" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
-          <label>Host</label>
-          <input placeholder="192.168.1.1" value={form.host} onChange={e => setForm({ ...form, host: e.target.value })} />
+          <label>{t('fieldName')}</label>
+          <input placeholder={t('placeholderName')} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
+          <label>{t('fieldHost')}</label>
+          <input placeholder={t('placeholderHost')} value={form.host} onChange={e => setForm({ ...form, host: e.target.value })} />
           <div className="form-row">
             <div>
-              <label>Port</label>
+              <label>{t('fieldPort')}</label>
               <input placeholder="22" value={form.port} onChange={e => setForm({ ...form, port: e.target.value })} />
             </div>
             <div>
-              <label>Username</label>
-              <input placeholder="root" value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} />
+              <label>{t('fieldUsername')}</label>
+              <input placeholder={t('placeholderUsername')} value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} />
             </div>
           </div>
 
           <div className="auth-tabs">
-            <button className={`auth-tab ${authMode === 'password' ? 'active' : ''}`} onClick={() => setAuthMode('password')}>{Ico.lock(13)} Password</button>
-            <button className={`auth-tab ${authMode === 'key' ? 'active' : ''}`} onClick={() => setAuthMode('key')}>{Ico.key(13)} SSH Key</button>
+            <button className={`auth-tab ${authMode === 'password' ? 'active' : ''}`} onClick={() => setAuthMode('password')}>{Ico.lock(13)} {t('authPassword')}</button>
+            <button className={`auth-tab ${authMode === 'key' ? 'active' : ''}`} onClick={() => setAuthMode('key')}>{Ico.key(13)} {t('authKey')}</button>
             <button className={`auth-tab ${authMode === 'agent' ? 'active' : ''}`} onClick={() => setAuthMode('agent')}>
-              {Ico.agent(13)} Agent{agentAvailable === true ? ' ✓' : agentAvailable === false ? ' ✗' : ''}
+              {Ico.agent(13)} {t('authAgent')}{agentAvailable === true ? ' ✓' : agentAvailable === false ? ' ✗' : ''}
             </button>
           </div>
 
           {authMode === 'password' && (
             <>
-              <label>Password</label>
-              <input type="password" placeholder="••••••••" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} />
+              <label>{t('fieldPassword')}</label>
+              <input type="password" placeholder={t('placeholderPassword')} value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} />
             </>
           )}
 
           {authMode === 'key' && (
             <>
-              <label>SSH Private Key</label>
+              <label>{t('fieldSshKey')}</label>
               <SshKeyPicker
                 value={form.privateKeyPath}
                 onChange={p => setForm({ ...form, privateKeyPath: p })}
@@ -724,18 +746,18 @@ function ServerModal({
               />
               {keyEncrypted && (
                 <div className="key-warning" style={{ marginBottom: 6 }}>
-                  🔐 Цей ключ зашифрований — введіть passphrase нижче, або перейдіть на режим <strong>Agent</strong>.
+                  🔐 {t('encryptedKeyWarning')}
                 </div>
               )}
               <label style={{ marginTop: 6 }}>
-                Passphrase
+                {t('fieldPassphrase')}
                 {keyEncrypted
-                  ? <span style={{ color: 'var(--red)', marginLeft: 4 }}>* required</span>
-                  : <span style={{ color: 'var(--text3)', fontWeight: 400, marginLeft: 4 }}>(якщо ключ зашифрований)</span>}
+                  ? <span style={{ color: 'var(--red)', marginLeft: 4 }}>{t('passphraseRequired')}</span>
+                  : <span style={{ color: 'var(--text3)', fontWeight: 400, marginLeft: 4 }}>{t('passphraseIfEncrypted')}</span>}
               </label>
               <input
                 type="password"
-                placeholder={keyEncrypted ? 'Введіть passphrase від ключа' : 'Залиште порожнім якщо немає'}
+                placeholder={t('placeholderPassphrase')}
                 value={form.passphrase}
                 onChange={e => setForm({ ...form, passphrase: e.target.value })}
                 style={keyEncrypted && !form.passphrase ? { borderColor: 'var(--red)' } : {}}
@@ -748,25 +770,25 @@ function ServerModal({
               {agentAvailable === true && <>
                 <span>✓</span>
                 <div>
-                  <strong>SSH Agent знайдено</strong>
-                  <div>Ключі які вже додані в Pageant або OpenSSH agent будуть використані автоматично.</div>
+                  <strong>{t('agentFound')}</strong>
+                  <div>{t('agentKeys')}</div>
                 </div>
               </>}
               {agentAvailable === false && <>
                 <span>✗</span>
                 <div>
-                  <strong>SSH Agent не знайдено</strong>
-                  <div>Запустіть <code>OpenSSH Authentication Agent</code> в services.msc, або відкрийте Pageant і додайте ключ.</div>
+                  <strong>{t('agentNotFound')}</strong>
+                  <div>{t('agentInstructions')}</div>
                 </div>
               </>}
-              {agentAvailable === null && <div>Перевірка agent…</div>}
+              {agentAvailable === null && <div>{t('checkingAgent')}</div>}
             </div>
           )}
 
           {/* ── Jump Host ─────────────────────────────────────────── */}
           <div className="jump-host-toggle" onClick={() => setUseJump(v => !v)}>
             <span className="jump-host-chevron" style={{ transform: useJump ? 'rotate(90deg)' : 'none' }}>›</span>
-            <span>ProxyJump (Jump Host)</span>
+            <span>{t('proxyJump')}</span>
             {useJump && <span className="jump-host-badge">ON</span>}
           </div>
 
@@ -774,40 +796,40 @@ function ServerModal({
             <div className="jump-host-body">
               <div className="form-row">
                 <div>
-                  <label>Jump Host</label>
+                  <label>{t('jumpHostLabel')}</label>
                   <input placeholder="bastion.company.com" value={jump.host}
                     onChange={e => setJump({ ...jump, host: e.target.value })} />
                 </div>
                 <div>
-                  <label>Port</label>
+                  <label>{t('fieldPort')}</label>
                   <input placeholder="22" value={jump.port}
                     onChange={e => setJump({ ...jump, port: e.target.value })} />
                 </div>
               </div>
-              <label>Username</label>
+              <label>{t('fieldUsername')}</label>
               <input placeholder="ubuntu" value={jump.username}
                 onChange={e => setJump({ ...jump, username: e.target.value })} />
 
               <div className="auth-tabs" style={{ marginTop: 8 }}>
                 <button className={`auth-tab ${jump.authMode === 'password' ? 'active' : ''}`}
-                  onClick={() => setJump({ ...jump, authMode: 'password' })}>{Ico.lock(12)} Password</button>
+                  onClick={() => setJump({ ...jump, authMode: 'password' })}>{Ico.lock(12)} {t('authPassword')}</button>
                 <button className={`auth-tab ${jump.authMode === 'key' ? 'active' : ''}`}
-                  onClick={() => setJump({ ...jump, authMode: 'key' })}>{Ico.key(12)} Key</button>
+                  onClick={() => setJump({ ...jump, authMode: 'key' })}>{Ico.key(12)} {t('authKey')}</button>
                 <button className={`auth-tab ${jump.authMode === 'agent' ? 'active' : ''}`}
-                  onClick={() => setJump({ ...jump, authMode: 'agent' })}>{Ico.agent(12)} Agent</button>
+                  onClick={() => setJump({ ...jump, authMode: 'agent' })}>{Ico.agent(12)} {t('authAgent')}</button>
               </div>
 
               {jump.authMode === 'password' && (
                 <>
-                  <label>Password</label>
-                  <input type="password" placeholder="••••••••" value={jump.password}
+                  <label>{t('fieldPassword')}</label>
+                  <input type="password" placeholder={t('placeholderPassword')} value={jump.password}
                     onChange={e => setJump({ ...jump, password: e.target.value })} />
                 </>
               )}
               {jump.authMode === 'key' && (
                 <>
-                  <label>SSH Key path</label>
-                  <input placeholder="~/.ssh/id_ed25519" value={jump.privateKeyPath}
+                  <label>{t('fieldSshKey')}</label>
+                  <input placeholder={t('placeholderKeyPath')} value={jump.privateKeyPath}
                     onChange={e => setJump({ ...jump, privateKeyPath: e.target.value })} />
                 </>
               )}
@@ -821,7 +843,7 @@ function ServerModal({
             </div>
           )}
 
-          <label>Color</label>
+          <label>{t('fieldColor')}</label>
           <div className="color-row">
             {colors.map(c => (
               <div key={c} className={`color-dot ${form.color === c ? 'active' : ''}`} style={{ background: c }} onClick={() => setForm({ ...form, color: c })} />
@@ -829,16 +851,16 @@ function ServerModal({
           </div>
         </div>
         <div className="modal-footer">
-          <button className="btn-secondary" onClick={onClose}>Cancel</button>
+          <button className="btn-secondary" onClick={onClose}>{t('cancel')}</button>
           {isEdit ? (
             <>
-              <button className="btn-secondary" disabled={!valid} onClick={() => valid && onSave(buildServer(), false)}>Save</button>
-              <button className="btn-primary" disabled={!valid} onClick={() => valid && onSave(buildServer(), true)}>Save & Connect</button>
+              <button className="btn-secondary" disabled={!valid} onClick={() => valid && onSave(buildServer(), false)}>{t('save')}</button>
+              <button className="btn-primary" disabled={!valid} onClick={() => valid && onSave(buildServer(), true)}>{t('saveAndConnect')}</button>
             </>
           ) : (
             <>
-              <button className="btn-secondary" disabled={!valid} onClick={() => valid && onSave(buildServer(), false)}>Save Only</button>
-              <button className="btn-primary" disabled={!valid} onClick={() => valid && onSave(buildServer(), true)}>Connect</button>
+              <button className="btn-secondary" disabled={!valid} onClick={() => valid && onSave(buildServer(), false)}>{t('saveOnly')}</button>
+              <button className="btn-primary" disabled={!valid} onClick={() => valid && onSave(buildServer(), true)}>{t('connect')}</button>
             </>
           )}
         </div>
@@ -863,6 +885,7 @@ function highlight(text: string, query: string): React.ReactNode {
 }
 
 function NotesPanel({ serverId, visible }: { serverId: string | null; visible: boolean }) {
+  const { t } = useLanguage()
   const [notes, setNotes] = useState<Note[]>([])
   const [expanded, setExpanded] = useState<string | null>(null)
   const [editing, setEditing] = useState<Note | null>(null)
@@ -916,12 +939,12 @@ function NotesPanel({ serverId, visible }: { serverId: string | null; visible: b
   return (
     <div className={`notes-panel${visible ? '' : ' notes-panel--collapsed'}`}>
       <div className="notes-header">
-        <span>Notes</span>
+        <span>{t('notes')}</span>
         <div className="notes-header-actions">
           {notes.length > 0 && (
-            <button className="notes-icon-btn" onClick={exportMarkdown} title="Export all notes as Markdown">↓</button>
+            <button className="notes-icon-btn" onClick={exportMarkdown} title={t('exportNotes')}>↓</button>
           )}
-          <button className="notes-icon-btn" onClick={newNote} title="New note">+</button>
+          <button className="notes-icon-btn" onClick={newNote} title={t('newNote')}>+</button>
         </div>
       </div>
 
@@ -930,7 +953,7 @@ function NotesPanel({ serverId, visible }: { serverId: string | null; visible: b
         <div className="notes-search">
           <input
             ref={searchRef}
-            placeholder="Search notes…"
+            placeholder={t('searchNotes')}
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
@@ -942,10 +965,10 @@ function NotesPanel({ serverId, visible }: { serverId: string | null; visible: b
 
       <div className="notes-list">
         {notes.length === 0 && (
-          <div className="notes-empty">No notes yet.<br />Click + to add one.</div>
+          <div className="notes-empty">{t('noNotes').split('\n').map((line, i) => <span key={i}>{line}{i === 0 ? <br /> : ''}</span>)}</div>
         )}
         {notes.length > 0 && filtered.length === 0 && (
-          <div className="notes-empty">No notes match<br />"{search}"</div>
+          <div className="notes-empty">{t('noNotesMatch')}<br />"{search}"</div>
         )}
         {filtered.map(note => (
           <div key={note.id} className={`note-item ${isExpanded(note.id) ? 'note-expanded' : ''}`}>
@@ -980,18 +1003,18 @@ function NotesPanel({ serverId, visible }: { serverId: string | null; visible: b
         <div className="modal-overlay" onClick={() => setEditing(null)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <span>{notes.some(n => n.id === editing.id) ? 'Edit Note' : 'New Note'}</span>
+              <span>{notes.some(n => n.id === editing.id) ? t('editNote') : t('newNoteTitle')}</span>
               <button className="modal-close" onClick={() => setEditing(null)}>✕</button>
             </div>
             <div className="modal-body">
-              <label>Title</label>
+              <label>{t('noteTitle')}</label>
               <input value={editing.title} onChange={e => setEditing({ ...editing, title: e.target.value })} />
-              <label>Content</label>
+              <label>{t('noteContent')}</label>
               <textarea rows={12} value={editing.content} onChange={e => setEditing({ ...editing, content: e.target.value })} />
             </div>
             <div className="modal-footer">
-              <button className="btn-secondary" onClick={() => setEditing(null)}>Cancel</button>
-              <button className="btn-primary" onClick={() => save(editing)}>Save</button>
+              <button className="btn-secondary" onClick={() => setEditing(null)}>{t('cancel')}</button>
+              <button className="btn-primary" onClick={() => save(editing)}>{t('save')}</button>
             </div>
           </div>
         </div>
@@ -1007,6 +1030,7 @@ function SnippetsPanel({
   onInsert: (cmd: string) => void
   onRun: (cmd: string) => void
 }) {
+  const { t } = useLanguage()
   const [tab, setTab] = useState<'mine' | 'library'>('mine')
   const [snippets, setSnippets] = useState<Snippet[]>([])
   const [search, setSearch] = useState('')
@@ -1052,13 +1076,13 @@ function SnippetsPanel({
   return (
     <div className="snippets-panel">
       <div className="snippets-tabs">
-        <button className={`snip-tab ${tab === 'mine' ? 'active' : ''}`} onClick={() => setTab('mine')}>My Snippets</button>
-        <button className={`snip-tab ${tab === 'library' ? 'active' : ''}`} onClick={() => setTab('library')}>Library</button>
+        <button className={`snip-tab ${tab === 'mine' ? 'active' : ''}`} onClick={() => setTab('mine')}>{t('mySnippets')}</button>
+        <button className={`snip-tab ${tab === 'library' ? 'active' : ''}`} onClick={() => setTab('library')}>{t('library')}</button>
       </div>
 
       <div className="snippets-search">
         <input
-          placeholder="Search…"
+          placeholder={t('searchSnippets')}
           value={search}
           onChange={e => setSearch(e.target.value)}
         />
@@ -1069,7 +1093,7 @@ function SnippetsPanel({
         <div className="snippets-list">
           {filtered.length === 0 && (
             <div className="snip-empty">
-              {search ? 'No matches' : 'No snippets yet.\nClick + to add your first.'}
+              {search ? t('noMatches') : t('noSnippets').split('\n').map((line, i) => <span key={i}>{line}{i === 0 ? <br /> : ''}</span>)}
             </div>
           )}
           {filtered.map(sn => (
@@ -1078,14 +1102,14 @@ function SnippetsPanel({
               <div className="snip-command">{sn.command}</div>
               {sn.description && <div className="snip-desc">{sn.description}</div>}
               <div className="snip-actions">
-                <button className="snip-btn snip-insert" title="Insert (no newline)" onClick={() => onInsert(sn.command)}>Insert</button>
-                <button className="snip-btn snip-run" title="Run (with Enter)" onClick={() => onRun(sn.command)}>▶ Run</button>
-                <button className="snip-btn snip-edit" title="Edit" onClick={() => setEditing(sn)}>✏</button>
-                <button className="snip-btn snip-del" title="Delete" onClick={() => del(sn.id)}>🗑</button>
+                <button className="snip-btn snip-insert" title={t('insertSnippet')} onClick={() => onInsert(sn.command)}>Insert</button>
+                <button className="snip-btn snip-run" title={t('runSnippet')} onClick={() => onRun(sn.command)}>▶ Run</button>
+                <button className="snip-btn snip-edit" title={t('editSnippet')} onClick={() => setEditing(sn)}>✏</button>
+                <button className="snip-btn snip-del" title={t('deleteSnippet')} onClick={() => del(sn.id)}>🗑</button>
               </div>
             </div>
           ))}
-          <button className="snip-add-btn" onClick={() => setEditing(newSnippet())}>+ New Snippet</button>
+          <button className="snip-add-btn" onClick={() => setEditing(newSnippet())}>{t('newSnippetBtn')}</button>
         </div>
       )}
 
@@ -1109,16 +1133,16 @@ function SnippetsPanel({
                   <div className="snip-actions">
                     <button className="snip-btn snip-insert" onClick={() => onInsert(it.command)}>Insert</button>
                     <button className="snip-btn snip-run" onClick={() => onRun(it.command)}>▶ Run</button>
-                    <button className="snip-btn snip-save-lib" title="Save to My Snippets"
+                    <button className="snip-btn snip-save-lib" title={t('saveToSnippets')}
                       onClick={() => save({ id: Date.now().toString(), title: it.title, command: it.command, description: it.description })}>
-                      + Save
+                      + {t('save')}
                     </button>
                   </div>
                 </div>
               ))}
             </div>
           ))}
-          {libFiltered.length === 0 && <div className="snip-empty">No matches</div>}
+          {libFiltered.length === 0 && <div className="snip-empty">{t('noMatches')}</div>}
         </div>
       )}
 
@@ -1127,20 +1151,20 @@ function SnippetsPanel({
         <div className="modal-overlay" onClick={() => setEditing(null)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <span>{editing.id && snippets.some(s => s.id === editing.id) ? 'Edit Snippet' : 'New Snippet'}</span>
+              <span>{editing.id && snippets.some(s => s.id === editing.id) ? t('editSnippetTitle') : t('newSnippetTitle')}</span>
               <button className="modal-close" onClick={() => setEditing(null)}>✕</button>
             </div>
             <div className="modal-body">
-              <label>Title</label>
-              <input placeholder="e.g. Restart Nginx" value={editing.title} onChange={e => setEditing({ ...editing, title: e.target.value })} />
-              <label>Command</label>
-              <textarea rows={4} className="snip-cmd-input" placeholder="e.g. systemctl restart nginx" value={editing.command} onChange={e => setEditing({ ...editing, command: e.target.value })} />
-              <label>Description <span style={{ opacity: 0.5, fontWeight: 400 }}>(optional)</span></label>
-              <input placeholder="Short note about what it does" value={editing.description || ''} onChange={e => setEditing({ ...editing, description: e.target.value })} />
+              <label>{t('snippetTitle')}</label>
+              <input placeholder={t('snippetTitlePlaceholder')} value={editing.title} onChange={e => setEditing({ ...editing, title: e.target.value })} />
+              <label>{t('snippetCommand')}</label>
+              <textarea rows={4} className="snip-cmd-input" placeholder={t('snippetCommandPlaceholder')} value={editing.command} onChange={e => setEditing({ ...editing, command: e.target.value })} />
+              <label>{t('snippetDescription')} <span style={{ opacity: 0.5, fontWeight: 400 }}>{t('optional')}</span></label>
+              <input placeholder={t('snippetDescPlaceholder')} value={editing.description || ''} onChange={e => setEditing({ ...editing, description: e.target.value })} />
             </div>
             <div className="modal-footer">
-              <button className="btn-secondary" onClick={() => setEditing(null)}>Cancel</button>
-              <button className="btn-primary" onClick={() => { if (editing.title && editing.command) save(editing) }}>Save</button>
+              <button className="btn-secondary" onClick={() => setEditing(null)}>{t('cancel')}</button>
+              <button className="btn-primary" onClick={() => { if (editing.title && editing.command) save(editing) }}>{t('save')}</button>
             </div>
           </div>
         </div>
@@ -1217,6 +1241,7 @@ function applyResize(
 
 // --- Terminal Tab ---
 function TerminalPane({ tab, active, onReconnect, inSplit }: { tab: Tab; active: boolean; onReconnect: () => void; inSplit?: boolean }) {
+  const { t } = useLanguage()
   const outerRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
@@ -1528,7 +1553,7 @@ function TerminalPane({ tab, active, onReconnect, inSplit }: { tab: Tab; active:
           <input
             ref={searchInputRef}
             className="term-search-input"
-            placeholder="Search in terminal…"
+            placeholder={t('searchTerminal')}
             value={searchQuery}
             onChange={e => { setSearchQuery(e.target.value); doSearch(e.target.value) }}
             onKeyDown={e => {
@@ -1540,10 +1565,10 @@ function TerminalPane({ tab, active, onReconnect, inSplit }: { tab: Tab; active:
             <span className="term-search-count">{searchIdx + 1}/{searchResults.length}</span>
           )}
           {searchQuery && searchResults.length === 0 && (
-            <span className="term-search-no-match">No matches</span>
+            <span className="term-search-no-match">{t('noMatches')}</span>
           )}
-          <button className="term-search-nav" onClick={() => searchNavigate('prev')} title="Previous (Shift+Enter)">↑</button>
-          <button className="term-search-nav" onClick={() => searchNavigate('next')} title="Next (Enter)">↓</button>
+          <button className="term-search-nav" onClick={() => searchNavigate('prev')} title={t('prevMatch')}>↑</button>
+          <button className="term-search-nav" onClick={() => searchNavigate('next')} title={t('nextMatch')}>↓</button>
           <button className="term-search-close" onClick={() => { setShowSearch(false); setSearchQuery(''); setSearchResults([]); termRef.current?.focus() }}>✕</button>
         </div>
       )}
@@ -1563,16 +1588,16 @@ function TerminalPane({ tab, active, onReconnect, inSplit }: { tab: Tab; active:
           onClick={e => e.stopPropagation()}
         >
           <button className="ctx-item" onClick={ctxCopy}>
-            <span className="ctx-icon">⎘</span> Copy
+            <span className="ctx-icon">⎘</span> {t('copyText')}
             <span className="ctx-shortcut">Ctrl+Shift+C</span>
           </button>
           <button className="ctx-item" onClick={ctxPaste}>
-            <span className="ctx-icon">⏎</span> Paste
+            <span className="ctx-icon">⏎</span> {t('pasteText')}
             <span className="ctx-shortcut">Ctrl+Shift+V</span>
           </button>
           <div className="ctx-sep" />
           <button className="ctx-item" onClick={() => { setShowSearch(true); setCtxMenu(null) }}>
-            <span className="ctx-icon">🔍</span> Find
+            <span className="ctx-icon">🔍</span> {t('findInTerminal')}
             <span className="ctx-shortcut">Ctrl+F</span>
           </button>
           <div className="ctx-sep" />
@@ -1587,11 +1612,11 @@ function TerminalPane({ tab, active, onReconnect, inSplit }: { tab: Tab; active:
             }
           }}>
             <span className="ctx-icon">{logging ? '■' : '⏺'}</span>
-            {logging ? 'Stop Logging' : 'Start Logging'}
+            {logging ? t('stopLoggingMenu') : t('startLogging')}
           </button>
           <div className="ctx-sep" />
           <button className="ctx-item ctx-item-danger" onClick={ctxClear}>
-            <span className="ctx-icon">✕</span> Clear Terminal
+            <span className="ctx-icon">✕</span> {t('clearTerminal')}
           </button>
         </div>
       )}
@@ -1622,6 +1647,7 @@ function SftpBrowser({
   sessionId: string | null
   onOpenFile: (remotePath: string, sessionId: string) => void
 }) {
+  const { t } = useLanguage()
   const [path, setPath] = useState('/')
   const [files, setFiles] = useState<{ name: string; isDir: boolean; path: string }[]>([])
   const [loading, setLoading] = useState(false)
@@ -1697,14 +1723,14 @@ function SftpBrowser({
   if (!sessionId) return (
     <div className="sftp-no-session">
       <span>📡</span>
-      <div>Connect to a server<br />to browse files</div>
+      <div>{t('sftpEmpty').split('\n').map((line, i) => <span key={i}>{line}{i === 0 ? <br /> : ''}</span>)}</div>
     </div>
   )
 
   return (
     <div className="sftp-browser">
       <div className="sftp-toolbar">
-        <button className="sftp-btn" onClick={goUp} disabled={path === '/'} title="Go up">↑</button>
+        <button className="sftp-btn" onClick={goUp} disabled={path === '/'} title={t('goUp')}>↑</button>
         {editingPath ? (
           <input
             className="sftp-path-input"
@@ -1724,21 +1750,21 @@ function SftpBrowser({
             onClick={() => { setPathInput(path); setEditingPath(true) }}
           >{path}</span>
         )}
-        <button className="sftp-btn" onClick={() => navigator.clipboard.writeText(path)} title="Copy path">⎘</button>
-        <button className="sftp-btn" onClick={() => loadDir(path)} title="Refresh">↺</button>
+        <button className="sftp-btn" onClick={() => navigator.clipboard.writeText(path)} title={t('copyPath')}>⎘</button>
+        <button className="sftp-btn" onClick={() => loadDir(path)} title={t('refresh')}>↺</button>
         <button
           className="sftp-btn sftp-btn-upload"
           onClick={handleUpload}
           disabled={!!transferring}
-          title="Upload file to current directory"
-        >↑ Upload</button>
+          title={t('uploadTitle')}
+        >{t('upload')}</button>
       </div>
-      {loading && <div className="sftp-status">Loading…</div>}
-      {transferring && <div className="sftp-status sftp-status-transfer">⇅ {transferring === '…' ? 'Uploading…' : `Downloading ${transferring}…`}</div>}
+      {loading && <div className="sftp-status">{t('loading')}</div>}
+      {transferring && <div className="sftp-status sftp-status-transfer">{transferring === '…' ? t('uploading') : `${t('downloading')}${transferring}…`}</div>}
       {error && <div className="sftp-status sftp-status-error" title={error}>⚠ {error}</div>}
       {!loading && !error && (
         <div className="sftp-list">
-          {files.length === 0 && <div className="sftp-status">Empty directory</div>}
+          {files.length === 0 && <div className="sftp-status">{t('emptyDirectory')}</div>}
           {files.map(f => (
             <div
               key={f.name}
@@ -1753,7 +1779,7 @@ function SftpBrowser({
                   className="sftp-dl-btn"
                   onClick={e => handleDownload(e, f.path, f.name)}
                   disabled={!!transferring}
-                  title={`Download ${f.name}`}
+                  title={`${t('download')}${f.name}`}
                 >↓</button>
               )}
             </div>
@@ -1817,6 +1843,7 @@ function CommandPalette({
   onToggleNotes: () => void
   onToggleSide: () => void
 }) {
+  const { t } = useLanguage()
   const [query, setQuery] = useState('')
   const [selectedIdx, setSelectedIdx] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -1831,14 +1858,14 @@ function CommandPalette({
 
   // Open sessions
   if (tabs.length > 0) {
-    tabs.forEach(t => {
-      const score = fuzzyBest(q, t.server.name, t.server.host, t.server.username)
+    tabs.forEach(tab => {
+      const score = fuzzyBest(q, tab.server.name, tab.server.host, tab.server.username)
       if (!q || score < Infinity) {
         allItems.push({
-          id: 'tab-' + t.id, section: 'Open sessions',
-          name: t.server.name,
-          sub: `${t.server.username}@${t.server.host}:${t.server.port}`,
-          dot: t.server.color || '#00d4aa',
+          id: 'tab-' + tab.id, section: t('paletteSectionSessions'),
+          name: tab.server.name,
+          sub: `${tab.server.username}@${tab.server.host}:${tab.server.port}`,
+          dot: tab.server.color || '#00d4aa',
           action: () => { onClose() },
           _score: score,
         })
@@ -1851,7 +1878,7 @@ function CommandPalette({
     const score = fuzzyBest(q, s.name, s.host, s.username || '')
     if (!q || score < Infinity) {
       allItems.push({
-        id: 'srv-' + s.id, section: 'Connect to',
+        id: 'srv-' + s.id, section: t('paletteSectionConnect'),
         name: s.name,
         sub: `${s.username}@${s.host}:${s.port}`,
         dot: s.color || '#00d4aa',
@@ -1863,15 +1890,15 @@ function CommandPalette({
 
   // Layouts
   const layouts: { l: SplitLayout; label: string }[] = [
-    { l: '1', label: 'Single pane' }, { l: '2h', label: '2 columns' },
-    { l: '2v', label: '2 rows' }, { l: '4', label: '2×2 grid' },
-    { l: '6', label: '3×2 grid' }, { l: '8', label: '4×2 grid' },
+    { l: '1', label: t('layoutSingle') }, { l: '2h', label: t('layout2col') },
+    { l: '2v', label: t('layout2row') }, { l: '4', label: t('layout2x2') },
+    { l: '6', label: t('layout3x2') }, { l: '8', label: t('layout4x2') },
   ]
   layouts.forEach(({ l, label }) => {
     const score = fuzzyBest(q, label, 'layout split ' + l)
     if (!q || score < Infinity) {
       allItems.push({
-        id: 'layout-' + l, section: 'Layout',
+        id: 'layout-' + l, section: t('paletteSectionLayout'),
         name: label, sub: `Split: ${l.toUpperCase()}`,
         icon: Ico.filter(13),
         action: () => { onChangeSplitLayout(l); onClose() },
@@ -1882,9 +1909,9 @@ function CommandPalette({
 
   // Actions
   const actions = [
-    { id: 'act-notes', name: 'Toggle notes panel',  sub: 'Show / hide right panel', kbd: 'N', fn: () => { onToggleNotes(); onClose() } },
-    { id: 'act-side',  name: 'Toggle server panel',  sub: 'Show / hide left panel',  kbd: 'B', fn: () => { onToggleSide(); onClose() } },
-    { id: 'act-new',   name: 'New connection…',       sub: 'Open connection dialog',  kbd: '+', fn: () => { onClose() } },
+    { id: 'act-notes', name: t('actionToggleNotes'),  sub: t('actionToggleNotesDesc'), kbd: 'N', fn: () => { onToggleNotes(); onClose() } },
+    { id: 'act-side',  name: t('actionToggleSidebar'),  sub: t('actionToggleSidebarDesc'),  kbd: 'B', fn: () => { onToggleSide(); onClose() } },
+    { id: 'act-new',   name: t('actionNewConnection'),       sub: t('actionNewConnectionDesc'),  kbd: '+', fn: () => { onClose() } },
   ]
   actions.forEach(a => {
     const score = fuzzyBest(q, a.name, a.sub || '')
@@ -1926,7 +1953,7 @@ function CommandPalette({
           <input
             ref={inputRef}
             className="palette-input"
-            placeholder="Search servers, actions, layouts…"
+            placeholder={t('palettePlaceholder')}
             value={query}
             onChange={e => { setQuery(e.target.value); setSelectedIdx(0) }}
           />
@@ -1936,7 +1963,7 @@ function CommandPalette({
           )}
         </div>
         <div className="palette-results">
-          {sections.length === 0 && <div className="palette-empty">No results for "{query}"</div>}
+          {sections.length === 0 && <div className="palette-empty">{t('paletteNoResults')}{query}"</div>}
           {sections.map(sec => (
             <div key={sec.title}>
               <div className="palette-section">{sec.title}</div>
@@ -1975,25 +2002,26 @@ function CommandPalette({
 const GROUP_COLORS = ['#5B4FE8', '#00d4aa', '#f7706a', '#f0a500', '#4fc3f7', '#e91e8c', '#7c6af7', '#a8e063']
 
 function GroupModal({ onSave, onClose }: { onSave: (name: string, color: string) => void; onClose: () => void }) {
+  const { t } = useLanguage()
   const [name, setName] = useState('')
   const [color, setColor] = useState(GROUP_COLORS[0])
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal" style={{ maxWidth: 340 }} onClick={e => e.stopPropagation()}>
         <div className="modal-header">
-          <span>New Group</span>
+          <span>{t('newGroup')}</span>
           <button className="modal-close" onClick={onClose}>✕</button>
         </div>
         <div className="modal-body">
-          <label>Group name</label>
+          <label>{t('groupName')}</label>
           <input
-            placeholder="e.g. Production, Recon, Client A"
+            placeholder={t('groupNamePlaceholder')}
             value={name}
             onChange={e => setName(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && name.trim()) onSave(name.trim(), color) }}
             autoFocus
           />
-          <label style={{ marginTop: 12 }}>Color</label>
+          <label style={{ marginTop: 12 }}>{t('groupColor')}</label>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4 }}>
             {GROUP_COLORS.map(c => (
               <button
@@ -2009,9 +2037,9 @@ function GroupModal({ onSave, onClose }: { onSave: (name: string, color: string)
           </div>
         </div>
         <div className="modal-footer">
-          <button className="btn-secondary" onClick={onClose}>Cancel</button>
+          <button className="btn-secondary" onClick={onClose}>{t('cancel')}</button>
           <button className="btn-primary" disabled={!name.trim()} onClick={() => name.trim() && onSave(name.trim(), color)}>
-            Create
+            {t('groupCreate')}
           </button>
         </div>
       </div>
@@ -2072,6 +2100,10 @@ export default function App() {
     keyType: string
     reason: 'new' | 'changed'
   } | null>(null)
+
+  // i18n
+  const langState = useLangState()
+  const { t } = langState
 
   // Load servers
   useEffect(() => {
@@ -2615,21 +2647,22 @@ export default function App() {
   }, [tabs, activeTab])
 
   return (
-    <div className="app">
+    <LangContext.Provider value={langState}>
+      <div className="app">
       {/* Title bar */}
       <div className="titlebar" data-tauri-drag-region>
         <div className="titlebar-drag" data-tauri-drag-region />
         <span className="titlebar-title" data-tauri-drag-region>SENU</span>
         <div className="titlebar-drag" data-tauri-drag-region />
-        <button className="titlebar-help" onClick={() => setShowShortcuts(true)} title="Keyboard shortcuts (F1)">?</button>
+        <button className="titlebar-help" onClick={() => setShowShortcuts(true)} title={t('keyboardShortcuts')}>?</button>
         <div className="window-controls">
-          <button className="wc-btn wc-minimize" onClick={() => nt?.windowMinimize()} title="Згорнути">
+          <button className="wc-btn wc-minimize" onClick={() => nt?.windowMinimize()} title={t('minimize')}>
             <svg width="10" height="1" viewBox="0 0 10 1"><rect width="10" height="1" fill="currentColor"/></svg>
           </button>
-          <button className="wc-btn wc-maximize" onClick={() => nt?.windowMaximize()} title="На весь екран">
+          <button className="wc-btn wc-maximize" onClick={() => nt?.windowMaximize()} title={t('maximize')}>
             <svg width="10" height="10" viewBox="0 0 10 10"><rect x="0.5" y="0.5" width="9" height="9" rx="1" fill="none" stroke="currentColor" strokeWidth="1"/></svg>
           </button>
-          <button className="wc-btn wc-close" onClick={() => nt?.windowClose()} title="Закрити">
+          <button className="wc-btn wc-close" onClick={() => nt?.windowClose()} title={t('close')}>
             <svg width="10" height="10" viewBox="0 0 10 10"><line x1="0" y1="0" x2="10" y2="10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/><line x1="10" y1="0" x2="0" y2="10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
           </button>
         </div>
@@ -2692,7 +2725,7 @@ export default function App() {
                   <span className="tab-pane-badge" title={`Pane ${paneIdx + 1}`}>{paneIdx + 1}</span>
                 )}
                 {(tab.status === 'error' || tab.status === 'disconnected') && (
-                  <button className="tab-reconnect" title="Reconnect" onClick={e => { e.stopPropagation(); reconnectTab(tab.id) }}>↻</button>
+                  <button className="tab-reconnect" title={t('reconnect')} onClick={e => { e.stopPropagation(); reconnectTab(tab.id) }}>↻</button>
                 )}
                 <button className="tab-close" onClick={e => { e.stopPropagation(); closeTab(tab.id) }}>✕</button>
               </div>
@@ -2701,13 +2734,13 @@ export default function App() {
         </div>
 
         <div className="tabbar-actions">
-          <button className="tabbar-btn" onClick={() => setShowAddServer(true)} title="New connection (saved profile)">{Ico.plus(13)}</button>
+          <button className="tabbar-btn" onClick={() => setShowAddServer(true)} title={t('newConnection')}>{Ico.plus(13)}</button>
           {/* Quick Connect */}
           {quickConnectOpen ? (
             <input
               className="quick-connect-input"
               autoFocus
-              placeholder="user@host:port"
+              placeholder={t('quickConnectPlaceholder')}
               value={quickConnectVal}
               onChange={e => setQuickConnectVal(e.target.value)}
               onKeyDown={e => {
@@ -2717,14 +2750,14 @@ export default function App() {
               onBlur={() => { if (!quickConnectVal) setQuickConnectOpen(false) }}
             />
           ) : (
-            <button className="tabbar-btn" onClick={() => setQuickConnectOpen(true)} title="Quick Connect (user@host:port)">
+            <button className="tabbar-btn" onClick={() => setQuickConnectOpen(true)} title={t('quickConnectTitle')}>
               ⚡
             </button>
           )}
           <button
             className="tabbar-btn"
             onClick={() => setShowPalette(v => !v)}
-            title="Command palette (Ctrl+K)"
+            title={t('commandPaletteTitle')}
             style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text3)', padding: '4px 7px', letterSpacing: '0.05em' }}
           >⌘K</button>
 
@@ -2734,7 +2767,7 @@ export default function App() {
               {filterGroupId && (
                 <button
                   className="tabbar-btn group-filter-clear"
-                  title="Show all tabs"
+                  title={t('showAllTabs')}
                   onClick={() => setFilterGroupId(null)}
                 >
                   {Ico.filter(12)} All
@@ -2776,7 +2809,7 @@ export default function App() {
           <div className="layout-picker-wrap" style={{ position: 'relative' }}>
             <button
               className={`tabbar-btn layout-btn ${splitLayout !== '1' ? 'active' : ''}`}
-              title="Split layout"
+              title={t('splitLayout')}
               onClick={() => setShowLayoutPicker(v => !v)}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
@@ -2789,7 +2822,7 @@ export default function App() {
                   <button
                     key={l}
                     className={`layout-option ${splitLayout === l ? 'active' : ''}`}
-                    title={{ '1': 'Single', '2h': '2 columns', '2v': '2 rows', '4': '2×2 grid', '6': '3×2 grid', '8': '4×2 grid' }[l]}
+                    title={{ '1': t('layoutSingle'), '2h': t('layout2col'), '2v': t('layout2row'), '4': t('layout2x2'), '6': t('layout3x2'), '8': t('layout4x2') }[l]}
                     onClick={() => changeSplitLayout(l, tabs, activeTab, paneSlots)}
                   >
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
@@ -2805,14 +2838,14 @@ export default function App() {
           {splitLayout !== '1' && (
             <button
               className={`tabbar-btn ${splitLocked ? 'active' : ''}`}
-              title={splitLocked ? 'Unlock splitter (drag to resize)' : 'Lock splitter'}
+              title={splitLocked ? t('unlockSplitter') : t('lockSplitter')}
               onClick={() => setSplitLocked(v => !v)}
             >
               {splitLocked ? Ico.lock(13) : Ico.unlock(13)}
             </button>
           )}
 
-          <button className={`tabbar-btn ${showNotes ? 'active' : ''}`} onClick={() => setShowNotes(v => !v)} title="Toggle notes">{Ico.notes(13)}</button>
+          <button className={`tabbar-btn ${showNotes ? 'active' : ''}`} onClick={() => setShowNotes(v => !v)} title={t('toggleNotes')}>{Ico.notes(13)}</button>
         </div>
       </div>
 
@@ -2836,7 +2869,7 @@ export default function App() {
               <button
                 key={panel}
                 className={`activity-btn ${isActive ? 'active' : ''}`}
-                title={panel === 'servers' ? 'Servers' : panel === 'sftp' ? 'SFTP Browser' : 'Command Snippets'}
+                title={panel === 'servers' ? t('servers') : panel === 'sftp' ? t('sftpBrowser') : t('commandSnippets')}
                 onClick={handleClick}
               >
                 {panel === 'servers' && (
@@ -2864,7 +2897,7 @@ export default function App() {
         <div className={`side-panel${sideCollapsed ? ' side-panel--collapsed' : ''}`}>
           {activePanel === 'servers' && (
             <>
-              <div className="panel-title">Servers</div>
+              <div className="panel-title">{t('servers')}</div>
               {servers.map(server => (
                 <div key={server.id} className="server-item" onClick={() => connectServer(server)}>
                   <span className="server-dot" style={{ background: server.color || '#00d4aa' }} />
@@ -2873,17 +2906,17 @@ export default function App() {
                     <span className="server-host">{server.username}@{server.host}</span>
                   </div>
                   <div className="server-actions">
-                    <button className="server-action-btn" title="Edit"
+                    <button className="server-action-btn" title={t('edit')}
                       onClick={e => { e.stopPropagation(); setEditingServer(server) }}>{Ico.pencil(13)}</button>
-                    <button className="server-action-btn server-action-del" title="Delete"
+                    <button className="server-action-btn server-action-del" title={t('delete')}
                       onClick={e => { e.stopPropagation(); deleteServer(server.id) }}>{Ico.trash(13)}</button>
                   </div>
                 </div>
               ))}
               {servers.length === 0 && (
-                <div className="sidebar-empty">No servers.<br />Click + to add.</div>
+                <div className="sidebar-empty">{t('noServers').split('\n').map((line, i) => <span key={i}>{line}{i === 0 ? <br /> : ''}</span>)}</div>
               )}
-              <button className="sidebar-add" onClick={() => setShowAddServer(true)}>+ Add Server</button>
+              <button className="sidebar-add" onClick={() => setShowAddServer(true)}>{t('addServer')}</button>
             </>
           )}
           {/* Always mounted — CSS hides it to preserve path state */}
@@ -2909,11 +2942,11 @@ export default function App() {
                   <div className="empty-hero">
                     <div className="empty-logo">{Ico.crystal()}</div>
                     <div className="empty-title">SENU</div>
-                    <div className="empty-sub">SSH workspace for those who see further</div>
+                    <div className="empty-sub">{t('appTagline')}</div>
                   </div>
                   {servers.length > 0 && (
                     <div className="empty-servers-section">
-                      <div className="empty-section-label">Швидке підключення</div>
+                      <div className="empty-section-label">{t('quickConnect')}</div>
                       <div className="empty-server-grid">
                         {servers.slice(0, 6).map(s => (
                           <div key={s.id} className="empty-server-card" onClick={() => connectServer(s)}>
@@ -2929,7 +2962,7 @@ export default function App() {
                     </div>
                   )}
                   <button className="btn-primary" onClick={() => setShowAddServer(true)}>
-                    + New Connection
+                    {t('newConnectionBtn')}
                   </button>
                 </div>
               )}
@@ -2965,9 +2998,9 @@ export default function App() {
                         <TerminalPane key={tab.id} tab={tab} active={isFocused} onReconnect={() => reconnectTab(tab.id)} inSplit />
                       ) : (
                         <div className="pane-empty">
-                          <div className="pane-empty-label">Pane {slotIdx + 1}</div>
-                          <div className="pane-empty-hint">Click a server to connect here</div>
-                          <button className="pane-empty-btn" onClick={e => { e.stopPropagation(); setActivePaneIdx(slotIdx); setShowAddServer(true) }}>+ Connect</button>
+                          <div className="pane-empty-label">{`${t('pane')} ${slotIdx + 1}`}</div>
+                          <div className="pane-empty-hint">{t('clickToConnect')}</div>
+                          <button className="pane-empty-btn" onClick={e => { e.stopPropagation(); setActivePaneIdx(slotIdx); setShowAddServer(true) }}>{t('connectBtn')}</button>
                         </div>
                       )}
                     </div>
@@ -3162,6 +3195,7 @@ export default function App() {
           onClose={() => setShowGroupModal(null)}
         />
       )}
-    </div>
+      </div>
+    </LangContext.Provider>
   )
 }
