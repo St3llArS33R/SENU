@@ -50,4 +50,4 @@ npm run tauri build
 
 ## License
 
-MIT
+Copyright (c) 2026 St3llArS33R. All rights reserved. Proprietary software.
