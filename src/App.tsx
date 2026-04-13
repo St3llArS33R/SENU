@@ -377,6 +377,7 @@ function ShortcutsModal({ onClose }: { onClose: () => void }) {
 function StatusBar({ tab }: { tab: Tab | null }) {
   const { t, lang, setLang } = useLanguage()
   const [uptime, setUptime] = useState('')
+  const [ipVisible, setIpVisible] = useState(false)
 
   useEffect(() => {
     if (!tab?.connectedAt || tab.status !== 'connected') { setUptime(''); return }
@@ -414,8 +415,13 @@ function StatusBar({ tab }: { tab: Tab | null }) {
           <span className="status-dot" style={{ background: statusColors[tab.status] || 'var(--text3)' }} />
           <span className="status-item">{tab.server.name}</span>
           <span className="status-sep">·</span>
-          <span className="status-item status-dim" style={{ fontFamily: '"JetBrains Mono", monospace' }}>
-            {tab.server.username}@{tab.server.host}:{tab.server.port}
+          <span
+            className="status-item status-dim status-host"
+            style={{ fontFamily: '"JetBrains Mono", monospace', cursor: 'pointer', userSelect: 'none' }}
+            onClick={() => setIpVisible(v => !v)}
+            title={ipVisible ? 'Click to hide' : 'Click to reveal'}
+          >
+            {tab.server.username}@{ipVisible ? `${tab.server.host}:${tab.server.port}` : '••••••••'}
           </span>
           {uptime && (
             <>
@@ -424,9 +430,11 @@ function StatusBar({ tab }: { tab: Tab | null }) {
             </>
           )}
           <div className="status-spacer" />
-          <span className="status-item status-dim" style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 11 }}>
-            {tab.status === 'connected' ? 'SSH · xterm-256color' : statusLabel(tab.status)}
-          </span>
+          {tab.status !== 'connected' && (
+            <span className="status-item status-dim" style={{ fontFamily: '"JetBrains Mono", monospace', fontSize: 11 }}>
+              {statusLabel(tab.status)}
+            </span>
+          )}
         </>
       )}
       {/* Language toggle — always visible on the right */}
@@ -724,9 +732,12 @@ function ServerModal({
           <div className="auth-tabs">
             <button className={`auth-tab ${authMode === 'password' ? 'active' : ''}`} onClick={() => setAuthMode('password')}>{Ico.lock(13)} {t('authPassword')}</button>
             <button className={`auth-tab ${authMode === 'key' ? 'active' : ''}`} onClick={() => setAuthMode('key')}>{Ico.key(13)} {t('authKey')}</button>
-            <button className={`auth-tab ${authMode === 'agent' ? 'active' : ''}`} onClick={() => setAuthMode('agent')}>
-              {Ico.agent(13)} {t('authAgent')}{agentAvailable === true ? ' ✓' : agentAvailable === false ? ' ✗' : ''}
-            </button>
+            {/* Agent tab — shown only when agent is available (Pageant/OpenSSH running) */}
+            {agentAvailable === true && (
+              <button className={`auth-tab ${authMode === 'agent' ? 'active' : ''}`} onClick={() => setAuthMode('agent')}>
+                {Ico.agent(13)} {t('authAgent')} ✓
+              </button>
+            )}
           </div>
 
           {authMode === 'password' && (
@@ -1450,8 +1461,11 @@ function TerminalPane({ tab, active, onReconnect, inSplit }: { tab: Tab; active:
     // Right-click context menu — always re-register after DOM move / fresh mount
     const handleContextMenu = (e: MouseEvent) => {
       e.preventDefault()
-      const rect = containerRef.current!.getBoundingClientRect()
-      setCtxMenu({ x: e.clientX - rect.left, y: e.clientY - rect.top })
+      // Menu is position:fixed — use viewport coords, clamped to window bounds
+      const menuW = 210, menuH = 175
+      const x = Math.min(e.clientX, window.innerWidth  - menuW - 8)
+      const y = Math.min(e.clientY, window.innerHeight - menuH - 8)
+      setCtxMenu({ x, y })
     }
     containerRef.current.addEventListener('contextmenu', handleContextMenu)
 
@@ -1588,16 +1602,16 @@ function TerminalPane({ tab, active, onReconnect, inSplit }: { tab: Tab; active:
           onClick={e => e.stopPropagation()}
         >
           <button className="ctx-item" onClick={ctxCopy}>
-            <span className="ctx-icon">⎘</span> {t('copyText')}
+            {t('copyText')}
             <span className="ctx-shortcut">Ctrl+Shift+C</span>
           </button>
           <button className="ctx-item" onClick={ctxPaste}>
-            <span className="ctx-icon">⏎</span> {t('pasteText')}
+            {t('pasteText')}
             <span className="ctx-shortcut">Ctrl+Shift+V</span>
           </button>
           <div className="ctx-sep" />
           <button className="ctx-item" onClick={() => { setShowSearch(true); setCtxMenu(null) }}>
-            <span className="ctx-icon">🔍</span> {t('findInTerminal')}
+            {t('findInTerminal')}
             <span className="ctx-shortcut">Ctrl+F</span>
           </button>
           <div className="ctx-sep" />
@@ -1611,12 +1625,11 @@ function TerminalPane({ tab, active, onReconnect, inSplit }: { tab: Tab; active:
               if (path) { setLogging(true); setLogPath(path) }
             }
           }}>
-            <span className="ctx-icon">{logging ? '■' : '⏺'}</span>
             {logging ? t('stopLoggingMenu') : t('startLogging')}
           </button>
           <div className="ctx-sep" />
           <button className="ctx-item ctx-item-danger" onClick={ctxClear}>
-            <span className="ctx-icon">✕</span> {t('clearTerminal')}
+            {t('clearTerminal')}
           </button>
         </div>
       )}

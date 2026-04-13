@@ -9,7 +9,6 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
-import { writeTextFile, BaseDirectory } from '@tauri-apps/plugin-fs';
 
 // ─── App.tsx types (mirror exactly what App.tsx uses) ────────────────────────
 
@@ -368,10 +367,10 @@ export const bridge = {
     await invoke('delete_note', { noteId });
   },
 
-  // Export notes as markdown — saves to downloads via FS plugin
+  // Export notes as markdown — opens native "Save As" dialog
   async saveMarkdown(filename: string, content: string): Promise<void> {
     try {
-      await writeTextFile(filename, content, { baseDir: BaseDirectory.Download });
+      await invoke('save_markdown_dialog', { filename, content });
     } catch (e) {
       console.error('saveMarkdown failed:', e);
     }

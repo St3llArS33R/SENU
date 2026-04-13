@@ -84,6 +84,7 @@ pub fn run() {
             vault::vault_delete_server,
             // Dialog
             dialog_commands::pick_ssh_key,
+            dialog_commands::save_markdown_dialog,
             // Window
             window_minimize,
             window_maximize,
