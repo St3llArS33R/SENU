@@ -170,10 +170,18 @@ isn't decided yet.
 
 ## Install
 
-Pre-built installers are not yet released. The first public release
-(`v0.9.0`) is targeted for summer 2026.
+Pre-built signed installers are available on the
+[Releases page](https://github.com/St3llArS33R/SENU/releases).
+The current pre-release is **`v0.9.0-beta.1`** — feature-complete and
+usable for daily work, but expect rough edges in the BETA / ALPHA
+subsystems (Notes, Log Viewer, Chat). The stable **`v0.9.0`** is
+targeted for summer 2026.
 
-For now, **build from source** — see below.
+- Windows → `.msi` (Wix) or `.exe` (NSIS)
+- macOS → `.dmg`
+- Linux → `.deb`, `.rpm`, `.AppImage`
+
+If you'd rather build it yourself, **build from source** — see below.
 
 ---
 
