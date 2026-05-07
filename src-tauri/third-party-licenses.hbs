@@ -1,0 +1,23 @@
+SENU — THIRD-PARTY LICENSES
+============================
+
+This document lists the third-party Rust crates bundled with SENU and their
+respective licenses. Generated automatically by `cargo about` from the live
+dependency graph; do not edit by hand.
+
+Frontend (npm) attributions live in NOTICE alongside this file.
+
+{{#each licenses}}
+================================================================================
+{{name}}
+{{#if used_by}}
+Used by:
+{{#each used_by}}
+  - {{this.crate.name}} {{this.crate.version}}{{#if this.crate.repository}} <{{this.crate.repository}}>{{/if}}
+{{/each}}
+{{/if}}
+================================================================================
+
+{{{text}}}
+
+{{/each}}

@@ -1,3 +1,19 @@
+// Copyright 2026 Borys Zaitsev
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
+
 /**
  * SENU — Tauri IPC Bridge
  *
@@ -29,6 +45,7 @@ interface AppSshConnectOptions {
   privateKeyPath?: string;
   passphrase?: string;
   useAgent?: boolean;
+  forwardAgent?: boolean;
   jumpHost?: AppJumpHost;
 }
 
@@ -37,6 +54,10 @@ interface AppNote {
   title: string;
   content: string;
   updatedAt: string;
+  createdAt?: string;
+  folderId?: string;
+  serverId?: string;
+  links?: import('./types').NoteLink[];
 }
 
 interface AppSnippet {
@@ -45,6 +66,41 @@ interface AppSnippet {
   command: string;
   description?: string;
   tags?: string[];
+}
+
+// ─── Chat types ──────────────────────────────────────────────────────────────
+
+export interface ChatIdentity {
+  pubkey_b64:   string;
+  short_id:     string;
+  display_name: string;
+}
+
+export interface ChatContact {
+  pubkey_b64:   string;
+  short_id:     string;
+  display_name: string;
+}
+
+export interface OnlineUser {
+  pubkey_b64:   string;
+  short_id:     string;
+  display_name: string;
+}
+
+export interface ChatMessage {
+  id:              string;
+  from_pubkey_b64: string;
+  from_name:       string;
+  content:         string;
+  timestamp:       number;
+  is_snippet:      boolean;
+}
+
+export interface SshKeyPair {
+  private_key_pem: string;
+  public_key:      string;
+  key_type:        string;
 }
 
 interface AppServer {
@@ -58,6 +114,14 @@ interface AppServer {
   passphrase?: string;
   useAgent?: boolean;
   color?: string;
+  // Non-SSH connection types
+  connType?: string;
+  localShell?: string;
+  asAdmin?: boolean;
+  serialPort?: string;
+  baudRate?: number;
+  dockerContainer?: string;
+  dockerShell?: string;
 }
 
 interface FileEntry {
@@ -68,6 +132,13 @@ interface FileEntry {
   permissions: string;
   modified?: number;
   owner: string;
+}
+interface LogSnapshot {
+  path: string;
+  fileSize: number;
+  lineCount: number;
+  truncated: boolean;
+  lines: string[];
 }
 
 // ─── Rust conversion helpers ─────────────────────────────────────────────────
@@ -103,6 +174,14 @@ function toRustServer(s: AppServer) {
     tags: [],
     color: s.color ?? null,
     notes: null,
+    // Non-SSH connection types
+    conn_type: s.connType ?? null,
+    local_shell: s.localShell ?? null,
+    as_admin: s.asAdmin ?? null,
+    serial_port: s.serialPort ?? null,
+    baud_rate: s.baudRate ?? null,
+    docker_container: s.dockerContainer ?? null,
+    docker_shell: s.dockerShell ?? null,
   };
 }
 
@@ -116,16 +195,27 @@ function fromRustServer(s: Record<string, unknown>): AppServer {
     privateKeyPath: (s.key_path as string | null) ?? undefined,
     useAgent: s.auth_type === 'agent',
     color: (s.color as string | null) ?? undefined,
+    // Non-SSH connection types
+    connType: (s.conn_type as string | null) ?? undefined,
+    localShell: (s.local_shell as string | null) ?? undefined,
+    asAdmin: (s.as_admin as boolean | null) ?? undefined,
+    serialPort: (s.serial_port as string | null) ?? undefined,
+    baudRate: (s.baud_rate as number | null) ?? undefined,
+    dockerContainer: (s.docker_container as string | null) ?? undefined,
+    dockerShell: (s.docker_shell as string | null) ?? undefined,
   };
 }
 
 function toRustNote(serverId: string, note: AppNote) {
   return {
     id: note.id,
-    server_id: serverId,
+    serverId: note.serverId ?? serverId,
     title: note.title,
     content: note.content,
-    updated_at: note.updatedAt,
+    updatedAt: note.updatedAt,
+    createdAt: note.createdAt,
+    folderId: note.folderId,
+    links: note.links ?? [],
   };
 }
 
@@ -134,7 +224,12 @@ function fromRustNote(n: Record<string, unknown>): AppNote {
     id: n.id as string,
     title: (n.title as string) ?? 'Untitled',
     content: n.content as string,
-    updatedAt: (n.updated_at as string) ?? new Date().toISOString(),
+    updatedAt:
+      (n.updatedAt as string) ?? (n.updated_at as string) ?? new Date().toISOString(),
+    createdAt: (n.createdAt as string | undefined) ?? (n.created_at as string | undefined),
+    folderId: (n.folderId as string | undefined) ?? (n.folder_id as string | undefined),
+    serverId: (n.serverId as string | undefined) ?? (n.server_id as string | undefined),
+    links: (n.links as import('./types').NoteLink[] | undefined) ?? [],
   };
 }
 
@@ -183,6 +278,7 @@ export const bridge = {
       username: opts.username,
       auth: toRustAuth(opts),
       jump_host: opts.jumpHost ? toRustJumpHost(opts.jumpHost) : null,
+      forward_agent: !!opts.forwardAgent,
     };
     const result = await invoke<{ session_id: string }>('ssh_connect', { options: payload });
     return { sessionId: result.session_id };
@@ -283,6 +379,12 @@ export const bridge = {
   async sftpUploadFile(sessionId: string, remoteDir: string): Promise<string | null> {
     return invoke<string | null>('sftp_upload_file', { sessionId, remoteDir });
   },
+  async readLocalLogTail(path: string, maxLines: number): Promise<LogSnapshot> {
+    return invoke<LogSnapshot>('read_local_log_tail', { path, maxLines });
+  },
+  async readRemoteLogTail(sessionId: string, path: string, maxLines: number): Promise<LogSnapshot> {
+    return invoke<LogSnapshot>('sftp_read_log_tail', { sessionId, path, maxLines });
+  },
 
   // ── SSH Keys ───────────────────────────────────────────────────────────────
 
@@ -312,15 +414,32 @@ export const bridge = {
   },
 
   async selectSshKey(): Promise<{ path: string; keyType: string; encrypted: boolean } | null> {
+    // Prefer JS-side plugin (newer versions parent correctly to the frameless
+    // window on Windows). Fall back to the Rust command if the plugin is not
+    // reachable for any reason.
+    let filePath: string | null = null;
     try {
-      // Use the Rust-side picker so the dialog is properly parented to the
-      // frameless window on Windows (JS-side dialogOpen loses the parent).
-      const filePath = await invoke<string | null>('pick_ssh_key');
-      if (!filePath) return null;
-      return { path: filePath, keyType: detectKeyType(filePath), encrypted: false };
+      const { open } = await import('@tauri-apps/plugin-dialog');
+      const result = await open({ multiple: false, directory: false, title: 'Select SSH Private Key' });
+      filePath = typeof result === 'string' ? result : null;
     } catch (e) {
-      console.error('[bridge] selectSshKey error:', e);
-      return null;
+      console.warn('[bridge] JS dialog failed, falling back to Rust picker:', e);
+      try {
+        filePath = await invoke<string | null>('pick_ssh_key');
+      } catch (e2) {
+        console.error('[bridge] selectSshKey error:', e2);
+        return null;
+      }
+    }
+    if (!filePath) return null;
+    return { path: filePath, keyType: detectKeyType(filePath), encrypted: false };
+  },
+
+  async netProbe(host: string, port: number, timeoutMs: number = 1500): Promise<boolean> {
+    try {
+      return await invoke<boolean>('net_probe', { host, port, timeoutMs });
+    } catch {
+      return false;
     }
   },
 
@@ -367,6 +486,20 @@ export const bridge = {
     await invoke('delete_note', { noteId });
   },
 
+  // ── Folders ────────────────────────────────────────────────────────────────
+
+  async getFolders(): Promise<import('./types').Folder[]> {
+    return await invoke<import('./types').Folder[]>('get_folders');
+  },
+
+  async saveFolder(folder: import('./types').Folder): Promise<void> {
+    await invoke('save_folder', { folder });
+  },
+
+  async deleteFolder(folderId: string): Promise<void> {
+    await invoke('delete_folder', { folderId });
+  },
+
   // Export notes as markdown — opens native "Save As" dialog
   async saveMarkdown(filename: string, content: string): Promise<void> {
     try {
@@ -408,6 +541,76 @@ export const bridge = {
 
   async vaultDeleteServer(serverId: string): Promise<void> {
     await invoke('vault_delete_server', { serverId });
+  },
+
+  // ── SSH key tools (formerly under Password Vault) ─────────────────────────
+
+  async vaultGenSshKey(keyType: string): Promise<SshKeyPair> {
+    return invoke<SshKeyPair>('vault_gen_ssh_key', { keyType });
+  },
+
+  async vaultSaveKeyDialog(content: string, filename: string): Promise<string | null> {
+    return invoke<string | null>('vault_save_key_dialog', { content, filename });
+  },
+
+  async vaultPushKeyToServer(
+    sessionId: string,
+    publicKey: string,
+    remotePath: string,
+  ): Promise<string> {
+    return invoke<string>('vault_push_key_to_server', { sessionId, publicKey, remotePath });
+  },
+
+  // ── Chat (E2E encrypted ephemeral messaging) ───────────────────────────────
+
+  async chatGetIdentity(): Promise<ChatIdentity> {
+    return invoke<ChatIdentity>('chat_get_identity');
+  },
+
+  async chatSetDisplayName(name: string): Promise<ChatIdentity> {
+    return invoke<ChatIdentity>('chat_set_display_name', { name });
+  },
+
+  async chatListContacts(): Promise<ChatContact[]> {
+    return invoke<ChatContact[]>('chat_list_contacts');
+  },
+
+  async chatAddContact(pubkeyB64: string, displayName: string): Promise<ChatContact> {
+    return invoke<ChatContact>('chat_add_contact', { pubkeyB64, displayName });
+  },
+
+  async chatRemoveContact(pubkeyB64: string): Promise<void> {
+    return invoke<void>('chat_remove_contact', { pubkeyB64 });
+  },
+
+  async chatAnnouncePresence(sessionId: string): Promise<void> {
+    return invoke<void>('chat_announce_presence', { sessionId });
+  },
+
+  async chatGetOnline(sessionId: string): Promise<OnlineUser[]> {
+    return invoke<OnlineUser[]>('chat_get_online', { sessionId });
+  },
+
+  async chatSendMessage(
+    sessionId: string,
+    recipientPubkeyB64: string,
+    content: string,
+    isSnippet: boolean,
+  ): Promise<void> {
+    return invoke<void>('chat_send_message', {
+      sessionId,
+      recipientPubkeyB64,
+      content,
+      isSnippet,
+    });
+  },
+
+  async chatPollMessages(sessionId: string): Promise<ChatMessage[]> {
+    return invoke<ChatMessage[]>('chat_poll_messages', { sessionId });
+  },
+
+  async chatLeave(sessionId: string): Promise<void> {
+    return invoke<void>('chat_leave', { sessionId });
   },
 
   // ── Known-hosts verification ───────────────────────────────────────────────
@@ -467,6 +670,10 @@ export const bridge = {
     invoke('window_close').catch(console.error);
   },
 
+  windowHide(): void {
+    invoke('window_hide').catch(console.error);
+  },
+
   onWindowResize(callback: (width: number, height: number) => void): () => void {
     // Use tauri://resize — fired by Tauri's Rust layer on every OS window resize.
     // window.addEventListener('resize') does NOT reliably fire in WebView2 when
@@ -487,6 +694,118 @@ export const bridge = {
     };
   },
 
+  // ── SSH Config import ──────────────────────────────────────────────────────
+  async parseSSHConfig(): Promise<{ name: string; host: string; port: number; username: string; key_path: string | null }[]> {
+    return invoke('parse_ssh_config');
+  },
+
+  // ─── Port Forwarding ──────────────────────────────────────────────────────────
+  sshForwardAdd(sessionId: string, localPort: number, remoteHost: string, remotePort: number): Promise<string> {
+    return invoke('ssh_forward_add', {
+      sessionId,
+      localPort,
+      remoteHost,
+      remotePort,
+    });
+  },
+
+  sshForwardRemove(forwardId: string): Promise<void> {
+    return invoke('ssh_forward_remove', { forwardId });
+  },
+
+  sshForwardList(sessionId: string): Promise<Array<{ id: string; local_port: number; remote_host: string; remote_port: number }>> {
+    return invoke('ssh_forward_list', { sessionId });
+  },
+
+  // ─── New connection types ──────────────────────────────────────────────────
+  async localConnect(shell?: string, cwd?: string): Promise<{ sessionId: string }> {
+    const r = await invoke<{ session_id: string }>('local_connect', { shell: shell ?? null, cwd: cwd ?? null });
+    return { sessionId: r.session_id };
+  },
+
+  /** Open a new elevated SENU window via UAC with the given shell as a tab.
+   *  The current window stays open. Throws if user cancels UAC. */
+  async localConnectAdmin(shell?: string): Promise<void> {
+    await invoke('local_connect_admin', { shell: shell ?? null });
+  },
+
+  /** Returns the --admin-shell value passed on CLI, or null.
+   *  Used by the elevated instance to auto-open the requested shell. */
+  getStartupAdminShell(): Promise<string | null> {
+    return invoke<string | null>('get_startup_admin_shell');
+  },
+
+  listShells(): Promise<string[]> {
+    return invoke('list_shells');
+  },
+
+  async dockerConnect(container: string, shell?: string): Promise<{ sessionId: string }> {
+    const r = await invoke<{ session_id: string }>('docker_connect', { container, shell: shell ?? null });
+    return { sessionId: r.session_id };
+  },
+
+  dockerListContainers(): Promise<Array<{ id: string; name: string; image: string; status: string }>> {
+    return invoke('docker_list_containers');
+  },
+
+  async telnetConnect(host: string, port: number): Promise<{ sessionId: string }> {
+    const r = await invoke<{ session_id: string }>('telnet_connect', { host, port });
+    return { sessionId: r.session_id };
+  },
+
+  serialListPorts(): Promise<string[]> {
+    return invoke('serial_list_ports');
+  },
+
+  async serialConnect(port: string, baudRate: number): Promise<{ sessionId: string }> {
+    const r = await invoke<{ session_id: string }>('serial_connect', { port, baudRate });
+    return { sessionId: r.session_id };
+  },
+
+  // ── Updater ────────────────────────────────────────────────────────────────
+  // Holds the Update object between check → download → install calls
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  _pendingUpdate: null as any,
+
+  async checkForUpdates(): Promise<{ hasUpdate: boolean; version?: string }> {
+    try {
+      const { check } = await import('@tauri-apps/plugin-updater');
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const update: any = await check();
+      bridge._pendingUpdate = update ?? null;
+      if (update) return { hasUpdate: true, version: update.version };
+      return { hasUpdate: false };
+    } catch (e) {
+      // Updater not configured or network unavailable — fail silently
+      console.warn('[SENU updater] check failed:', e);
+      return { hasUpdate: false };
+    }
+  },
+
+  async downloadUpdate(onProgress?: (percent: number) => void): Promise<void> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const update: any = bridge._pendingUpdate;
+    if (!update) return;
+    let total = 0;
+    let downloaded = 0;
+    await update.download((event: { event: string; data: { contentLength?: number; chunkLength?: number } }) => {
+      if (event.event === 'Started')   total = event.data.contentLength ?? 0;
+      if (event.event === 'Progress') {
+        downloaded += event.data.chunkLength ?? 0;
+        if (total > 0) onProgress?.(Math.round((downloaded / total) * 100));
+      }
+    });
+  },
+
+  async installUpdate(): Promise<void> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const update: any = bridge._pendingUpdate;
+    if (!update) return;
+    await update.install();
+    const { relaunch } = await import('@tauri-apps/plugin-process');
+    await relaunch();
+  },
+
   // ── Workspace (split layout persistence) ────────────────────────────────────
 
   async getWorkspace(): Promise<unknown> {
@@ -502,6 +821,11 @@ export const bridge = {
 // Self-initialize at import time so that any module that imports bridge.ts
 // before reading window.nextterm will see it already set.
 
+export type Bridge = typeof bridge;
+
+// window.nextterm is the bridge. Typed as `any` to remain compatible with
+// existing loose call sites (callback types, plugin methods added elsewhere,
+// etc). Prefer importing `bridge` directly from this module for type safety.
 declare global {
   interface Window {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

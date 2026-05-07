@@ -1,26 +1,84 @@
-# Node
+# ── Node / Vite ───────────────────────────────────────────────────────────
 node_modules/
 dist/
+dist-ssr/
 .vite/
+.cache/
+coverage/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
-# Tauri
+# ── Rust / Tauri ──────────────────────────────────────────────────────────
 src-tauri/target/
 src-tauri/WixTools/
+**/*.rs.bk
 
-# Env / secrets
+# ── Env / secrets ─────────────────────────────────────────────────────────
 .env
-.env.local
+.env.*
+!.env.example
+.envrc
+
+# Crypto material — defense in depth. The app stores these in app_data_dir,
+# not the repo, but we still refuse them in the working tree just in case
+# someone copies a real file in for debugging.
 *.pem
 *.key
+!senu.key.pub             # Tauri updater public key — required in repo
+id_rsa*
+id_ed25519*
+id_ecdsa*
+id_dsa*
 
-# OS
+# User data shapes that live in app_data_dir. Never want a real one
+# accidentally committed.
+notes.json
+folders.json
+passwords.json
+chat_identity.key
+chat_contacts.json
+servers.json
+snippets.json
+workspace.json
+
+# ── OS junk ───────────────────────────────────────────────────────────────
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
 Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+ehthumbs.db
 
-# Logs
+# ── Editors ───────────────────────────────────────────────────────────────
+.vscode/settings.json
+.vscode/launch.json
+.vscode/tasks.json
+.idea/
+*.swp
+*.swo
+*.swn
+*~
+.history/
+.cursor/
+
+# ── Logs ──────────────────────────────────────────────────────────────────
 *.log
 senu-logs/
+senu_logs/
 
-# Editor
-.vscode/settings.json
-.idea/
+# ── Generated artifacts ───────────────────────────────────────────────────
+# Regenerated on every `npm run build` by cargo-about. Commit the file
+# manually if you want a snapshot in the repo for code-review reviewers.
+THIRD-PARTY-LICENSES.txt
+
+# ── Internal dev docs ─────────────────────────────────────────────────────
+# Honest internal status / planning material. Not part of the public docs;
+# kept out of the repo so the public surface stays the README + in-app DocsPage.
+FEATURE_INVENTORY.md
+PROJECT_OVERVIEW.md
+TESTING_CHECKLIST.md

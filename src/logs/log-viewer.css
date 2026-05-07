@@ -1,0 +1,684 @@
+.main {
+  position: relative;
+}
+
+.logv-panel {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.logv-section {
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.logv-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.logv-section-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text3);
+}
+
+.logv-source-tabs,
+.logv-row,
+.logv-stats,
+.logv-toolbar-main,
+.logv-toolbar-sub,
+.logv-plugin-top,
+.logv-sidecar-kv {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.logv-row-tight {
+  gap: 12px;
+}
+
+.logv-grid-two {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.logv-source-tab,
+.logv-btn,
+.logv-pill,
+.logv-link-btn {
+  border: 1px solid var(--border2);
+  background: var(--bg3);
+  color: var(--text2);
+  border-radius: var(--r);
+  height: 30px;
+  padding: 0 10px;
+  cursor: pointer;
+  transition: border-color var(--t-normal), color var(--t-normal), background var(--t-normal);
+  font-family: var(--ui);
+}
+
+.logv-source-tab.active,
+.logv-btn-primary {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 65%, var(--border2));
+  background: var(--green-d);
+}
+
+.logv-btn:disabled,
+.logv-plugin-card:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.logv-source-tab:hover,
+.logv-btn:hover,
+.logv-pill:hover,
+.logv-link-btn:hover,
+.logv-plugin-card:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.logv-link-btn {
+  background: transparent;
+  height: 22px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+
+.logv-input {
+  width: 100%;
+  height: 32px;
+  border: 1px solid var(--border2);
+  border-radius: var(--r);
+  background: var(--bg2);
+  color: var(--text);
+  padding: 0 10px;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.logv-input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.logv-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--text3);
+  font-size: 11px;
+}
+
+.logv-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text2);
+  font-size: 11px;
+}
+
+.logv-preset-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.logv-pill {
+  height: 24px;
+  padding: 0 8px;
+  font-size: 10px;
+  background: transparent;
+}
+
+.logv-remote-note,
+.logv-meta-card,
+.logv-status,
+.logv-plugin-desc {
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.logv-remote-note,
+.logv-plugin-desc,
+.logv-meta-inline,
+.logv-current-path,
+.logv-status {
+  color: var(--text2);
+}
+
+.logv-meta-card,
+.logv-status {
+  border-radius: var(--r);
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  padding: 8px 10px;
+}
+
+.logv-status.is-error {
+  color: #f0b2a9;
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--border));
+  background: var(--danger-d);
+}
+
+.logv-plugin-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.logv-plugin-card {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--border2);
+  border-radius: var(--r-lg);
+  background: var(--bg2);
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.logv-plugin-card.is-active {
+  border-color: color-mix(in srgb, var(--accent) 70%, var(--border2));
+  background: color-mix(in srgb, var(--green-d) 60%, var(--bg2));
+}
+
+.logv-plugin-card.is-planned {
+  border-style: dashed;
+}
+
+.logv-plugin-top strong,
+.logv-title,
+.logv-sidecar-title {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.logv-plugin-state,
+.logv-plugin-caps span,
+.logv-annotation,
+.logv-stat,
+.logv-timeline-item strong {
+  font-family: var(--mono);
+  font-size: 10px;
+}
+
+.logv-plugin-state {
+  margin-left: auto;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text3);
+}
+
+.logv-plugin-caps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.logv-plugin-caps span {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 6px;
+  color: var(--text3);
+}
+
+.logv-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(7, 7, 7, 0.72);
+  backdrop-filter: blur(6px);
+  z-index: 60;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.logv-workspace {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  background: linear-gradient(180deg, rgba(16,16,16,0.96), rgba(10,10,10,0.98));
+  border: 1px solid var(--border3);
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.logv-toolbar {
+  border-bottom: 1px solid var(--border);
+  background: rgba(12,12,12,0.95);
+  padding: 14px 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.logv-title {
+  font-size: 16px;
+}
+
+.logv-current-path {
+  font-family: var(--mono);
+  font-size: 11px;
+  max-width: 70ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logv-title-block {
+  min-width: 0;
+}
+
+.logv-toolbar-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.logv-toolbar-search {
+  max-width: 340px;
+}
+
+.logv-meta-inline {
+  font-size: 11px;
+  margin-left: auto;
+}
+
+.logv-body {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+}
+
+.logv-stream {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border);
+}
+
+.logv-stats {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(14,14,14,0.96);
+}
+
+.logv-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 8px;
+  color: var(--text2);
+}
+
+.logv-stat.errors strong { color: #f19b90; }
+.logv-stat.warns strong { color: #e4c05a; }
+.logv-stat.infos strong { color: #73b1ff; }
+.logv-stat.debugs strong { color: #82d2ae; }
+
+.logv-empty {
+  margin: auto;
+  text-align: center;
+  color: var(--text2);
+}
+
+.logv-list {
+  flex: 1;
+  overflow: auto;
+  font-family: var(--mono);
+}
+.logv-load-more {
+  padding: 10px 16px;
+  font-size: 10px;
+  color: var(--text4);
+  text-align: center;
+  letter-spacing: 0.04em;
+  border-top: 1px solid var(--border);
+}
+
+.logv-row {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr);
+  align-items: start;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+
+.logv-row:hover {
+  background: rgba(255,255,255,0.03);
+}
+
+.logv-row.level-error { background: rgba(74,17,22,0.18); }
+.logv-row.level-warn { background: rgba(87,55,11,0.14); }
+.logv-row.level-info { background: rgba(17,35,58,0.12); }
+.logv-row.level-debug { background: rgba(19,61,45,0.10); }
+.logv-row.is-suspicious { box-shadow: inset 2px 0 0 var(--danger); }
+
+.logv-line-number {
+  padding: 9px 12px;
+  text-align: right;
+  color: var(--text3);
+  user-select: none;
+}
+
+.logv-line-body {
+  min-width: 0;
+  padding: 9px 16px 9px 0;
+}
+
+.logv-log-text,
+.logv-access-line {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.48;
+  font-size: 12px;
+}
+
+.logv-access-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.logv-token-ip { color: #73b1ff; }
+.logv-token-time { color: #bb9af7; }
+.logv-token-method { color: #8fd9b0; }
+.logv-token-path { color: #f2e486; }
+.logv-token-protocol,
+.logv-token-bytes { color: var(--text3); }
+.logv-token-agent {
+  color: var(--text2);
+  max-width: min(100%, 380px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logv-token-status,
+.logv-token-status-inline {
+  color: #cfd5df;
+}
+
+.logv-token-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  height: 20px;
+  border-radius: 999px;
+  padding: 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.logv-token-status-2xx { color: #9ce2bf; background: #133120; }
+.logv-token-status-3xx { color: #b9d6ff; background: #152c4b; }
+.logv-token-status-4xx { color: #f2d483; background: #473411; }
+.logv-token-status-5xx { color: #f5bab3; background: #4a2027; }
+
+.logv-token-suspicious,
+.logv-token-laravel {
+  color: #ef9a8d;
+}
+
+.logv-annotation {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.logv-annotation-neutral { color: #c7d1db; background: #232d39; }
+.logv-annotation-info { color: #b7f0ff; background: #163344; }
+.logv-annotation-warn { color: #f4d27f; background: #453414; }
+.logv-annotation-danger { color: #ffb3b3; background: #4a2126; }
+
+.logv-tip-anchor {
+  position: relative;
+}
+
+.logv-tip-anchor[data-logv-tip]:hover::after,
+.logv-tip-anchor[data-logv-tip]:focus-visible::after {
+  content: attr(data-logv-tip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%);
+  max-width: 280px;
+  min-width: 120px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border3);
+  background: color-mix(in srgb, var(--surface) 92%, black);
+  color: var(--text);
+  font-family: var(--ui);
+  font-size: 11px;
+  line-height: 1.45;
+  box-shadow: 0 10px 24px rgba(0,0,0,0.35);
+  white-space: normal;
+  z-index: 40;
+  pointer-events: none;
+}
+
+.logv-tip-anchor[data-logv-tip]:hover::before,
+.logv-tip-anchor[data-logv-tip]:focus-visible::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 2px);
+  transform: translateX(-50%);
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 6px solid color-mix(in srgb, var(--surface) 92%, black);
+  z-index: 41;
+  pointer-events: none;
+}
+
+.logv-sidecar {
+  background: rgba(12,12,12,0.96);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow: auto;
+}
+
+.logv-sidecar-card {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.logv-sidecar-list,
+.logv-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.logv-sidecar-item,
+.logv-timeline-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--text2);
+}
+
+.logv-sidecar-kv span {
+  color: var(--text3);
+  font-size: 11px;
+}
+
+.logv-sidecar-kv strong {
+  margin-left: auto;
+}
+
+@media (max-width: 1080px) {
+  .logv-body {
+    grid-template-columns: 1fr;
+  }
+
+  .logv-stream {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .logv-sidecar {
+    max-height: 220px;
+  }
+}
+
+@media (max-width: 720px) {
+  .logv-overlay {
+    padding: 8px;
+  }
+
+  .logv-toolbar-main,
+  .logv-toolbar-sub,
+  .logv-row {
+    flex-wrap: wrap;
+  }
+
+  .logv-row {
+    grid-template-columns: 1fr;
+  }
+
+  .logv-line-number {
+    text-align: left;
+    padding-bottom: 0;
+  }
+
+  .logv-line-body {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .logv-grid-two {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Tab bar ─────────────────────────────────────────────────────────────── */
+.logv-tab-bar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 16px 0;
+  background: rgba(10,10,10,0.95);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  min-height: 36px;
+  position: relative;
+  z-index: 1;
+}
+
+.logv-tab {
+  display: flex; align-items: center; gap: 5px;
+  padding: 4px 8px 4px 7px;
+  border-radius: 5px 5px 0 0;
+  border: 1px solid transparent;
+  border-bottom: none;
+  background: transparent;
+  color: var(--text3);
+  cursor: pointer;
+  font-size: 11px;
+  font-family: var(--font-ui, sans-serif);
+  transition: all 0.12s;
+  max-width: 180px;
+  white-space: nowrap;
+}
+.logv-tab:hover { background: var(--bg4); color: var(--text2); }
+.logv-tab.active {
+  background: rgba(16,16,16,0.96);
+  border-color: var(--border3);
+  color: var(--text);
+}
+
+.logv-tab-src {
+  font-size: 9px; font-weight: 700; letter-spacing: 0.04em;
+  padding: 1px 4px; border-radius: 3px;
+  background: var(--bg5); color: var(--text3);
+  flex-shrink: 0;
+}
+.logv-tab-src.sftp { color: var(--blue); background: rgba(74,158,255,0.1); }
+.logv-tab-src.local { color: var(--green); background: rgba(76,175,119,0.1); }
+
+.logv-tab-name {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 110px;
+}
+
+.logv-tab-close {
+  flex-shrink: 0; color: var(--text4); cursor: pointer;
+  padding: 0 1px; border-radius: 2px; font-size: 10px;
+  transition: color 0.1s, background 0.1s;
+}
+.logv-tab-close:hover { color: var(--red); background: var(--danger-d); }
+
+.logv-minimize-btn {
+  font-size: 10px; padding: 3px 7px;
+}
+
+/* ── Recent files ──────────────────────────────────────────────────────────── */
+.logv-recent-list {
+  display: flex; flex-direction: column; gap: 2px;
+}
+.logv-recent-item {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 8px; border-radius: var(--r);
+  background: none; border: none; cursor: pointer;
+  text-align: left; color: var(--text2);
+  font-size: 11px; transition: background 0.1s;
+  font-family: var(--font-ui, sans-serif);
+}
+.logv-recent-item:hover { background: var(--hover); color: var(--text); }
+
+.logv-recent-badge {
+  font-size: 9px; font-weight: 700; letter-spacing: 0.04em;
+  padding: 1px 4px; border-radius: 3px; flex-shrink: 0;
+  background: var(--bg5); color: var(--text3);
+}
+.logv-recent-badge.sftp { color: var(--blue); background: rgba(74,158,255,0.1); }
+.logv-recent-badge.local { color: var(--green); background: rgba(76,175,119,0.1); }
+
+.logv-recent-path {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;
+  font-family: var(--font-mono, monospace); font-size: 10px;
+}
+.logv-recent-open-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--green); flex-shrink: 0;
+}

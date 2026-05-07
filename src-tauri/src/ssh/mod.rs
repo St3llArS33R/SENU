@@ -1,9 +1,25 @@
+// Copyright 2026 Borys Zaitsev
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
+
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use tokio::sync::Mutex;
 use async_trait::async_trait;
 use russh::client::{self, Handler, Session};
-use russh::ChannelId;
+use russh::{ChannelId, CryptoVec};
 use russh_keys::key::PublicKey;
 use russh_keys::load_secret_key;
 use serde::{Deserialize, Serialize};
@@ -128,7 +144,7 @@ fn add_to_known_hosts(host: &str, port: u16, key_b64: &str, key_type: &str) {
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 pub type SessionId = String;
-pub type SessionStore = Arc<Mutex<HashMap<SessionId, SshSessionHandle>>>;
+pub type SessionStore = Arc<Mutex<HashMap<SessionId, SessionHandle>>>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConnectOptions {
@@ -137,6 +153,11 @@ pub struct ConnectOptions {
     pub username: String,
     pub auth: AuthMethod,
     pub jump_host: Option<Box<ConnectOptions>>,
+    /// Request ssh-agent forwarding after shell open. When enabled, the remote
+    /// host can reach the user's local ssh-agent for authenticating further SSH
+    /// hops (e.g. `git push` over SSH from the remote).
+    #[serde(default)]
+    pub forward_agent: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -189,16 +210,14 @@ pub struct HostKeyEvent {
 
 // ─── Session handle ──────────────────────────────────────────────────────────
 
-pub struct SshSessionHandle {
+pub struct SessionHandle {
     pub channel_tx: tokio::sync::mpsc::UnboundedSender<SshChannelMsg>,
-    /// Full session handle wrapped in Arc<Mutex> so it can be shared without Clone
-    /// (russh::client::Handle does not implement Clone).
-    /// Used to open additional channels: SFTP, port forwarding, etc.
-    pub ssh_handle: Arc<Mutex<client::Handle<SenuSshHandler>>>,
+    /// Present only for SSH sessions. Used for SFTP and port forwarding.
+    /// None for local/telnet/serial/docker connections.
+    pub ssh_handle: Option<Arc<Mutex<client::Handle<SenuSshHandler>>>>,
     // Keep jump host session alive for the lifetime of the tunneled session
     pub _jump_session: Option<client::Handle<SenuSshHandler>>,
 }
-
 pub enum SshChannelMsg {
     Data(Vec<u8>),
     Resize { cols: u32, rows: u32 },
@@ -223,6 +242,14 @@ pub struct SenuSshHandler {
     /// Uses std::sync::Mutex so we can read it inside async Handler methods
     /// without an await point (avoids holding a tokio MutexGuard across awaits).
     pty_channel_id: Arc<std::sync::Mutex<Option<ChannelId>>>,
+    /// Weak reference to this session's own Handle — populated AFTER connect
+    /// completes. Used by agent-forwarding proxy tasks to push bytes back into
+    /// the SSH channel. Weak avoids a reference cycle (Handle owns the task
+    /// which owns the Handler).
+    ssh_handle_weak: Arc<std::sync::Mutex<Option<Weak<Mutex<client::Handle<SenuSshHandler>>>>>>,
+    /// Open agent-forwarded channels → sender that pushes bytes into the local
+    /// ssh-agent writer task.
+    agent_writers: Arc<std::sync::Mutex<HashMap<ChannelId, tokio::sync::mpsc::UnboundedSender<Vec<u8>>>>>,
 }
 
 #[async_trait]
@@ -328,6 +355,13 @@ impl Handler for SenuSshHandler {
         data: &[u8],
         _session: &mut Session,
     ) -> Result<(), Self::Error> {
+        // Agent-forwarded channel: pipe bytes into the local ssh-agent socket.
+        let agent_sender = self.agent_writers.lock().unwrap().get(&channel).cloned();
+        if let Some(tx) = agent_sender {
+            let _ = tx.send(data.to_vec());
+            return Ok(());
+        }
+
         // Only forward data from the PTY channel — SFTP and other subsystem
         // channels share the same session but must NOT leak into the terminal.
         let is_pty = self.pty_channel_id.lock().unwrap()
@@ -387,6 +421,9 @@ impl Handler for SenuSshHandler {
         channel: ChannelId,
         _session: &mut Session,
     ) -> Result<(), Self::Error> {
+        // Drop agent-forwarding sender so the proxy task exits cleanly.
+        self.agent_writers.lock().unwrap().remove(&channel);
+
         let is_pty = self.pty_channel_id.lock().unwrap()
             .map(|id| id == channel)
             .unwrap_or(false);
@@ -396,6 +433,69 @@ impl Handler for SenuSshHandler {
                 exit_code: None,
             });
         }
+        Ok(())
+    }
+
+    /// Agent forwarding: server opens a channel back to us for each agent
+    /// request. We proxy bytes between this channel and the local ssh-agent
+    /// socket (Unix) or named pipe (Windows).
+    async fn server_channel_open_agent_forward(
+        &mut self,
+        channel: ChannelId,
+        _session: &mut Session,
+    ) -> Result<(), Self::Error> {
+        let (to_agent_tx, mut to_agent_rx) = tokio::sync::mpsc::unbounded_channel::<Vec<u8>>();
+        self.agent_writers.lock().unwrap().insert(channel, to_agent_tx);
+
+        let weak_slot = Arc::clone(&self.ssh_handle_weak);
+        let writers_cleanup = Arc::clone(&self.agent_writers);
+
+        tokio::spawn(async move {
+            use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+            #[cfg(unix)]
+            let stream_result = {
+                match std::env::var("SSH_AUTH_SOCK") {
+                    Ok(sock) => tokio::net::UnixStream::connect(sock).await.ok(),
+                    Err(_) => None,
+                }
+            };
+            #[cfg(windows)]
+            let stream_result = {
+                use tokio::net::windows::named_pipe::ClientOptions;
+                ClientOptions::new().open(r"\\.\pipe\openssh-ssh-agent").ok()
+            };
+
+            let Some(stream) = stream_result else {
+                log::warn!("agent-forward: local ssh-agent unavailable; dropping channel");
+                writers_cleanup.lock().unwrap().remove(&channel);
+                return;
+            };
+
+            let (mut agent_rx, mut agent_tx) = tokio::io::split(stream);
+            let mut buf = vec![0u8; 16 * 1024];
+
+            loop {
+                tokio::select! {
+                    msg = to_agent_rx.recv() => {
+                        let Some(bytes) = msg else { break; };
+                        if agent_tx.write_all(&bytes).await.is_err() { break; }
+                    }
+                    read = agent_rx.read(&mut buf) => {
+                        let n = match read { Ok(0) | Err(_) => break, Ok(n) => n };
+                        let weak_opt = weak_slot.lock().unwrap().clone();
+                        let Some(weak) = weak_opt else { break; };
+                        let Some(handle_arc) = weak.upgrade() else { break; };
+                        let data = CryptoVec::from_slice(&buf[..n]);
+                        let guard = handle_arc.lock().await;
+                        if guard.data(channel, data).await.is_err() { break; }
+                    }
+                }
+            }
+
+            writers_cleanup.lock().unwrap().remove(&channel);
+        });
+
         Ok(())
     }
 }
@@ -516,6 +616,9 @@ async fn open_jump_tunnel(
         trusted_hosts: Arc::clone(trusted_hosts),
         // Jump host has no PTY — all data is tunneled, not shown in terminal
         pty_channel_id: Arc::new(std::sync::Mutex::new(None)),
+        // Agent forwarding is only wired on the terminal session, not the jump tunnel.
+        ssh_handle_weak: Arc::new(std::sync::Mutex::new(None)),
+        agent_writers: Arc::new(std::sync::Mutex::new(HashMap::new())),
     };
 
     let addr = format!("{}:{}", jump_opts.host, jump_opts.port);
@@ -562,6 +665,13 @@ pub async fn ssh_connect(
     let pty_channel_id: Arc<std::sync::Mutex<Option<ChannelId>>> =
         Arc::new(std::sync::Mutex::new(None));
 
+    // Shared weak slot: filled in AFTER connect returns the Handle. Proxy tasks
+    // spawned from server_channel_open_agent_forward use this to write back.
+    let ssh_handle_weak: Arc<std::sync::Mutex<Option<Weak<Mutex<client::Handle<SenuSshHandler>>>>>> =
+        Arc::new(std::sync::Mutex::new(None));
+    let agent_writers: Arc<std::sync::Mutex<HashMap<ChannelId, tokio::sync::mpsc::UnboundedSender<Vec<u8>>>>> =
+        Arc::new(std::sync::Mutex::new(HashMap::new()));
+
     let handler = SenuSshHandler {
         session_id: session_id.clone(),
         app_handle: app_handle.clone(),
@@ -570,6 +680,8 @@ pub async fn ssh_connect(
         pending_verifications: Arc::clone(&pending),
         trusted_hosts: Arc::clone(&trusted_hosts),
         pty_channel_id: Arc::clone(&pty_channel_id),
+        ssh_handle_weak: Arc::clone(&ssh_handle_weak),
+        agent_writers: Arc::clone(&agent_writers),
     };
 
     // ── Connect (direct or via jump host) ───────────────────────────────────
@@ -616,6 +728,15 @@ pub async fn ssh_connect(
         .await
         .map_err(|e| SenuError::SshConnect(e.to_string()))?;
 
+    // Request agent forwarding BEFORE request_shell so the remote's shell can
+    // use the forwarded agent from its first command. Failure is non-fatal —
+    // we just log and continue without forwarding.
+    if options.forward_agent {
+        if let Err(e) = channel.agent_forward(false).await {
+            log::warn!("agent-forward request failed: {e}; continuing without forwarding");
+        }
+    }
+
     channel
         .request_shell(false)
         .await
@@ -649,11 +770,16 @@ pub async fn ssh_connect(
         }
     });
 
+    let ssh_handle_arc = Arc::new(Mutex::new(session));
+    // Populate the weak slot so agent-forwarding proxy tasks can write back
+    // into this session. Stored as Weak to avoid a Handle ↔ Handler cycle.
+    *ssh_handle_weak.lock().unwrap() = Some(Arc::downgrade(&ssh_handle_arc));
+
     sessions.lock().await.insert(
         session_id.clone(),
-        SshSessionHandle {
+        SessionHandle {
             channel_tx: tx,
-            ssh_handle: Arc::new(Mutex::new(session)),
+            ssh_handle: Some(ssh_handle_arc),
             _jump_session: jump_session,
         },
     );
@@ -667,7 +793,9 @@ pub async fn ssh_connect(
 pub async fn ssh_disconnect(
     session_id: SessionId,
     sessions: tauri::State<'_, SessionStore>,
+    forwards: tauri::State<'_, ForwardStore>,
 ) -> Result<(), SenuError> {
+    cleanup_forwards(&session_id, &forwards).await;
     if let Some(handle) = sessions.lock().await.remove(&session_id) {
         let _ = handle.channel_tx.send(SshChannelMsg::Close);
         // _jump_session dropped here → jump host connection closes
@@ -844,6 +972,10 @@ pub async fn ssh_generate_key(
     filename: String,          // ім'я файлу, напр. "id_ed25519" або "my_key"
     passphrase: Option<String>,
 ) -> Result<serde_json::Value, SenuError> {
+    // Reserved for future use — encrypt the PEM with a user-supplied
+    // passphrase. The frontend already passes the field, so the API contract
+    // stays stable; the value is intentionally ignored until encryption lands.
+    let _ = &passphrase;
     let home = dirs::home_dir()
         .ok_or_else(|| SenuError::Io("Cannot find home directory".into()))?;
     let ssh_dir = home.join(".ssh");
@@ -1007,4 +1139,150 @@ fn strip_ansi(s: &str) -> String {
         }
     }
     String::from_utf8_lossy(&out).into_owned()
+}
+
+// ─── Port Forwarding ──────────────────────────────────────────────────────────
+
+pub struct ForwardEntry {
+    pub id: String,
+    pub session_id: String,
+    pub local_port: u16,
+    pub remote_host: String,
+    pub remote_port: u16,
+    abort_handle: tokio::task::AbortHandle,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ForwardInfo {
+    pub id: String,
+    pub local_port: u16,
+    pub remote_host: String,
+    pub remote_port: u16,
+}
+
+pub type ForwardStore = Arc<Mutex<HashMap<String, ForwardEntry>>>;
+
+/// Open a local TCP port forward: connections to 127.0.0.1:local_port
+/// are tunneled to remote_host:remote_port via the SSH session.
+#[tauri::command]
+pub async fn ssh_forward_add(
+    session_id: String,
+    local_port: u16,
+    remote_host: String,
+    remote_port: u16,
+    sessions: tauri::State<'_, SessionStore>,
+    forwards: tauri::State<'_, ForwardStore>,
+) -> Result<String, SenuError> {
+    // Grab the Arc clone while holding the session lock briefly
+    let ssh_arc = {
+        let store = sessions.lock().await;
+        let h = store
+            .get(&session_id)
+            .ok_or_else(|| SenuError::SessionNotFound(session_id.clone()))?;
+        h.ssh_handle.as_ref()
+            .ok_or_else(|| SenuError::SshConnect("Port forwarding requires an SSH connection".into()))
+            .map(Arc::clone)?
+    };
+
+    let forward_id = Uuid::new_v4().to_string();
+    let fid        = forward_id.clone();
+    let sid        = session_id.clone();
+    // Keep separate copies: one for the closure, one for the ForwardEntry
+    let rh_task    = remote_host.clone();
+    let rh_store   = remote_host.clone();
+    let rp         = remote_port;
+
+    let listener = tokio::net::TcpListener::bind(
+        std::net::SocketAddr::from(([127, 0, 0, 1], local_port)),
+    )
+    .await
+    .map_err(|e| SenuError::Io(format!("Cannot bind 127.0.0.1:{local_port}: {e}")))?;
+
+    let task = tokio::spawn(async move {
+        loop {
+            let (mut tcp_stream, _peer) = match listener.accept().await {
+                Ok(v)  => v,
+                Err(_) => break,
+            };
+            let arc  = Arc::clone(&ssh_arc);
+            let host = rh_task.clone();
+            let port = rp;
+            tokio::spawn(async move {
+                let channel = {
+                    let handle = arc.lock().await;
+                    match handle
+                        .channel_open_direct_tcpip(&host, port as u32, "127.0.0.1", 0)
+                        .await
+                    {
+                        Ok(ch) => ch,
+                        Err(e) => {
+                            log::warn!("port-forward direct-tcpip failed: {e}");
+                            return;
+                        }
+                    }
+                };
+                let mut ssh_stream = channel.into_stream();
+                let _ = tokio::io::copy_bidirectional(&mut tcp_stream, &mut ssh_stream).await;
+            });
+        }
+    });
+
+    let abort_handle = task.abort_handle();
+    forwards.lock().await.insert(
+        forward_id.clone(),
+        ForwardEntry {
+            id:          fid,
+            session_id:  sid,
+            local_port,
+            remote_host: rh_store,
+            remote_port: rp,
+            abort_handle,
+        },
+    );
+
+    Ok(forward_id)
+}
+
+/// Stop (remove) a port forward by its id.
+#[tauri::command]
+pub async fn ssh_forward_remove(
+    forward_id: String,
+    forwards: tauri::State<'_, ForwardStore>,
+) -> Result<(), SenuError> {
+    if let Some(entry) = forwards.lock().await.remove(&forward_id) {
+        entry.abort_handle.abort();
+    }
+    Ok(())
+}
+
+/// List active forwards for a session.
+#[tauri::command]
+pub async fn ssh_forward_list(
+    session_id: String,
+    forwards: tauri::State<'_, ForwardStore>,
+) -> Result<Vec<ForwardInfo>, SenuError> {
+    let store = forwards.lock().await;
+    Ok(store
+        .values()
+        .filter(|e| e.session_id == session_id)
+        .map(|e| ForwardInfo {
+            id:          e.id.clone(),
+            local_port:  e.local_port,
+            remote_host: e.remote_host.clone(),
+            remote_port: e.remote_port,
+        })
+        .collect())
+}
+
+/// Clean up all forwards for a session (called on disconnect).
+pub async fn cleanup_forwards(session_id: &str, forwards: &ForwardStore) {
+    let mut store = forwards.lock().await;
+    store.retain(|_, e| {
+        if e.session_id == session_id {
+            e.abort_handle.abort();
+            false
+        } else {
+            true
+        }
+    });
 }

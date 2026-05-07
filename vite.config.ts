@@ -1,3 +1,4 @@
+/// <reference types="vitest" />
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
@@ -39,4 +40,11 @@ export default defineConfig(async () => ({
 
   // Make env variables available
   envPrefix: ['VITE_', 'TAURI_ENV_'],
+
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    css: false,
+  },
 }))

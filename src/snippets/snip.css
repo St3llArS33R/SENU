@@ -1,0 +1,281 @@
+/* ── SnipDocView — central screen overlay ─────────────────────────────────── */
+.snip-doc-stage {
+  position: absolute;
+  inset: 0;
+  z-index: 75;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.snip-doc-topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 20px;
+  height: 40px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  background: var(--panel);
+}
+
+.snip-doc-back {
+  background: none;
+  border: none;
+  color: var(--text3);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 4px 8px 4px 0;
+  white-space: nowrap;
+  transition: color 0.12s;
+  flex-shrink: 0;
+}
+.snip-doc-back:hover { color: var(--accent); }
+
+.snip-doc-topbar-title {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.snip-doc-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 32px 40px;
+  max-width: 860px;
+  width: 100%;
+}
+
+.snip-doc-desc {
+  font-size: 13px;
+  color: var(--text2);
+  line-height: 1.7;
+  margin: 0 0 20px;
+}
+
+/* ── Section blocks ─────────────────────────────────────────────────────────── */
+.snip-doc-block {
+  margin-bottom: 24px;
+}
+.snip-doc-block--main {
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
+.snip-doc-block-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  color: var(--text3);
+  margin-bottom: 10px;
+}
+
+/* Syntax box */
+.snip-doc-syntax-box {
+  border-radius: 8px;
+  padding: 12px 16px;
+  word-break: break-all;
+}
+
+/* Options table */
+.snip-doc-opts-table {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.snip-doc-opt-row {
+  display: grid;
+  grid-template-columns: minmax(160px, auto) 1fr;
+  gap: 16px;
+  align-items: baseline;
+  padding: 8px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  transition: background 0.1s;
+}
+.snip-doc-opt-row:last-child { border-bottom: none; }
+.snip-doc-opt-row:hover { background: rgba(255,255,255,0.03); }
+.snip-doc-opt-flag {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--green);
+  white-space: nowrap;
+  background: none;
+  padding: 0;
+}
+.snip-doc-opt-desc {
+  font-size: 12px;
+  color: var(--text2);
+  line-height: 1.5;
+}
+
+/* Examples */
+.snip-doc-examples-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.snip-doc-ex-card {
+  border-radius: 8px;
+  padding: 12px 14px;
+  border: none;
+}
+.snip-doc-ex-cmd {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  word-break: break-all;
+  margin-bottom: 10px;
+  line-height: 1.5;
+}
+.snip-doc-ex-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.snip-doc-ex-label {
+  font-size: 11px;
+  color: var(--text3);
+  margin-left: 6px;
+}
+
+/* Related commands */
+.snip-doc-related {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.snip-doc-related-btn {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text2);
+  font-size: 11px;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: all 0.12s;
+  font-family: var(--mono);
+}
+.snip-doc-related-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--green-d);
+}
+
+/* ── Details button in library sidebar items ──────────────────────────────── */
+.snip-details-btn {
+  margin-left: auto;
+  color: var(--accent) !important;
+  border-color: rgba(74,186,138,0.25) !important;
+}
+.snip-details-btn:hover {
+  border-color: var(--accent) !important;
+  background: var(--green-d) !important;
+}
+
+/* ── Pack Manager ─────────────────────────────────────────────────────────── */
+.snip-pack-manager {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 2px 8px;
+}
+.snip-pack-toolbar {
+  display: flex;
+  gap: 6px;
+  padding: 0 4px;
+}
+.snip-pack-import-btn {
+  flex: 1;
+  background: none;
+  border: 1px dashed var(--border2);
+  border-radius: var(--r);
+  color: var(--text3);
+  font-size: 11.5px;
+  font-family: inherit;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.snip-pack-import-btn:hover { border-color: var(--accent); color: var(--accent); background: var(--green-d); }
+
+.snip-pack-card {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  overflow: hidden;
+  margin: 0 4px;
+}
+.snip-pack-card-header {
+  display: flex;
+  align-items: center;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  gap: 8px;
+}
+.snip-pack-card-info { flex: 1; min-width: 0; }
+.snip-pack-name { font-size: 12px; font-weight: 600; color: var(--text); display: block; }
+.snip-pack-meta { font-size: 10px; color: var(--text3); }
+.snip-pack-card-actions { display: flex; gap: 4px; }
+.snip-pack-export-btn, .snip-pack-delete-btn {
+  background: none; border: 1px solid var(--border); border-radius: 4px;
+  color: var(--text3); font-size: 11px; cursor: pointer; padding: 2px 7px;
+  transition: all 0.12s; font-family: inherit;
+}
+.snip-pack-export-btn:hover { color: var(--accent); border-color: var(--accent); }
+.snip-pack-delete-btn:hover { color: var(--red); border-color: var(--red); }
+
+.snip-pack-groups { display: flex; flex-direction: column; }
+.snip-pack-group-row {
+  display: flex; align-items: center; gap: 6px; padding: 5px 10px;
+  border-bottom: 1px solid rgba(255,255,255,0.03); transition: background 0.1s;
+}
+.snip-pack-group-row:last-child { border-bottom: none; }
+.snip-pack-group-row:hover { background: rgba(255,255,255,0.03); }
+.snip-pack-group-row.is-hidden { opacity: 0.45; }
+.snip-pack-group-icon { font-size: 13px; flex-shrink: 0; }
+.snip-pack-group-name { flex: 1; font-size: 11.5px; color: var(--text2); }
+.snip-pack-group-count {
+  font-size: 10px; color: var(--text3); background: var(--surface);
+  border-radius: 10px; padding: 0 5px;
+}
+.snip-pack-group-ctrl { display: flex; gap: 2px; }
+.snip-pack-ctrl-btn {
+  background: none; border: 1px solid transparent; color: var(--text3);
+  font-size: 11px; cursor: pointer; padding: 1px 5px; border-radius: 3px;
+  line-height: 1.4; font-family: inherit; transition: all 0.1s;
+}
+.snip-pack-ctrl-btn:hover:not(:disabled) { color: var(--text); border-color: var(--border2); }
+.snip-pack-ctrl-btn:disabled { opacity: 0.25; cursor: default; }
+.snip-pack-visibility-btn.is-off { opacity: 0.45; }
+.snip-pack-visibility-btn:hover:not(:disabled) { color: var(--accent); }
+
+/* ── Edit snippet modal ─────────────────────────────────────────────────────── */
+.snip-edit-modal { width: min(560px, 96vw); max-height: min(80vh, 700px); }
+.snip-edit-body { overflow-y: auto; max-height: calc(min(80vh, 700px) - 100px); }
+.snip-edit-divider {
+  font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em;
+  color: var(--text3); margin: 10px 0 4px; padding-top: 10px; border-top: 1px solid var(--border);
+}
+.snip-edit-row { display: flex; gap: 5px; align-items: center; margin-bottom: 4px; }
+.snip-edit-row-flag  { flex: 0 0 120px; }
+.snip-edit-row-desc,
+.snip-edit-row-label { flex: 1; }
+.snip-edit-row-cmd   { flex: 1; }
+.snip-edit-row-del, .snip-edit-row-add-btn {
+  flex-shrink: 0; background: none; border: 1px solid var(--border); border-radius: 4px;
+  color: var(--text3); font-size: 11px; cursor: pointer; padding: 3px 7px;
+  font-family: inherit; line-height: 1; transition: all 0.1s;
+}
+.snip-edit-row-del:hover     { color: var(--red); border-color: var(--red); }
+.snip-edit-row-add-btn:hover { color: var(--accent); border-color: var(--accent); }
+.snip-edit-row-add { opacity: 0.6; }
+.snip-edit-row-add:focus-within { opacity: 1; }

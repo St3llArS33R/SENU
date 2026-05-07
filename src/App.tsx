@@ -1,70 +1,59 @@
-import { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
+// Copyright 2026 Borys Zaitsev
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
+
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
-import Editor from '@monaco-editor/react'
+import SftpEditor from './components/SftpEditor'
 import '@xterm/xterm/css/xterm.css'
+import '@fontsource/ibm-plex-sans/300.css'
+import '@fontsource/ibm-plex-sans/400.css'
+import '@fontsource/ibm-plex-sans/500.css'
+import '@fontsource/ibm-plex-sans/600.css'
+import '@fontsource/jetbrains-mono/400.css'
+import '@fontsource/jetbrains-mono/500.css'
 import './App.css'
+import { LogViewerPanel } from './logs/LogViewerPanel'
+import { AchievementsProvider, AchievementsPanel, useAchievements } from './Achievements'
+import SnippetsPanel, { SnipDocView } from './snippets/SnippetsPanel'
+import type { SnipDocState } from './snippets/SnippetsPanel'
+import { NoteEditor } from './notes/NoteEditor'
+import { ContextMenu } from './components/ContextMenu'
+import { foldersStore } from './stores/foldersStore'
+import { DocsPage } from './notes/DocsPage'
+import { ChatPanel, ChatThreadView } from './chat/ChatPanel'
+import type { ChatThreadState } from './chat/ChatPanel'
+import { getErrorMessage } from './utils'
+import type { Server } from './types'
+export type { Server, JumpHost } from './types'
+import { HomeScreen, markServerConnected } from './HomeScreen'
+import { ImportSSHModal } from './ImportSSHModal'
+import { Ico } from './icons'
+import { ServerModal } from './ServerModal'
+import { NotesPanel } from './NotesPanel'
+import { TunnelsPopover } from './TunnelsPopover'
+import { CommandHistoryOverlay } from './CommandHistoryOverlay'
+import { addCommand as addCmdHistory } from './commandHistory'
+import type { Note } from './types'
+
 // Must be imported before reading window.nextterm below — this ensures bridge.ts
 // evaluates (and sets window.nextterm = bridge) before the module-level const nt.
 import './bridge'
 import { LangContext, useLangState, useLanguage } from './i18n'
-
-// ── Flat SVG Icons ─────────────────────────────────────────────────────────
-const Ico = {
-  pencil: (s=16) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>,
-  trash:  (s=16) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>,
-  notes:  (s=16) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>,
-  lock:   (s=16) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>,
-  unlock: (s=16) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>,
-  key:    (s=16) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="M21 2l-9.6 9.6M15.5 7.5l3 3"/></svg>,
-  folder: (s=16) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>,
-  tag:    (s=16) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>,
-  filter: (s=16) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>,
-  plus:   (s=16) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>,
-  agent:  (s=16) => <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><line x1="4.93" y1="4.93" x2="9.17" y2="9.17"/><line x1="14.83" y1="14.83" x2="19.07" y2="19.07"/><line x1="14.83" y1="9.17" x2="19.07" y2="4.93"/><line x1="4.93" y1="19.07" x2="9.17" y2="14.83"/></svg>,
-  // SENU crystal for empty state
-  crystal: () => (
-    <svg width="52" height="52" viewBox="0 0 52 52" fill="none">
-      <polygon points="26,3 3,26 26,26" fill="#23233a"/>
-      <polygon points="26,3 49,26 26,26" fill="#2e2e48"/>
-      <polygon points="3,26 26,49 26,26" fill="#5B4FE8"/>
-      <polygon points="49,26 26,49 26,26" fill="#1a1a2e"/>
-      <line x1="26" y1="3" x2="26" y2="49" stroke="#0d0d1a" strokeWidth="0.7"/>
-      <line x1="3" y1="26" x2="49" y2="26" stroke="#0d0d1a" strokeWidth="0.7"/>
-    </svg>
-  ),
-}
-
-// Types
-interface JumpHost {
-  host: string
-  port: number
-  username: string
-  password?: string
-  privateKeyPath?: string
-  useAgent?: boolean
-}
-
-interface Server {
-  id: string
-  name: string
-  host: string
-  port: number
-  username: string
-  password?: string
-  privateKeyPath?: string
-  passphrase?: string
-  useAgent?: boolean
-  color?: string
-  jumpHost?: JumpHost
-}
-
-interface Note {
-  id: string
-  title: string
-  content: string
-  updatedAt: string
-}
+import { ThemeContext, useThemeState, useTheme, THEMES, THEME_GROUPS, getXtermTheme } from './themes'
 
 interface TabGroup {
   id: string
@@ -81,6 +70,7 @@ interface Tab {
   fitAddon: FitAddon | null
   connectedAt?: number
   groupId?: string
+  label?: string  // user-defined display name (overrides server.name)
 }
 
 interface EditorFile {
@@ -90,137 +80,29 @@ interface EditorFile {
   modified: boolean
 }
 
-interface Snippet {
+interface TabEditorState {
+  files: EditorFile[]
+  activePath: string | null
+  saveError: string
+  minimized: boolean
+}
+const DEFAULT_EDITOR_STATE: TabEditorState = {
+  files: [], activePath: null, saveError: '', minimized: false,
+}
+
+interface PortForward {
   id: string
-  title: string
-  command: string
-  description?: string
-  tags?: string[]
+  sessionId: string
+  localPort: number
+  remoteHost: string
+  remotePort: number
 }
 
-// --- Built-in snippet library ---
-const SNIPPET_LIBRARY: { category: string; icon: string; items: { title: string; command: string; description?: string }[] }[] = [
-  {
-    category: 'System', icon: '🖥',
-    items: [
-      { title: 'Disk usage', command: 'df -h', description: 'Human-readable disk space' },
-      { title: 'Memory usage', command: 'free -h', description: 'RAM and swap usage' },
-      { title: 'Top processes', command: 'top -b -n 1 | head -20' },
-      { title: 'CPU info', command: 'lscpu | grep -E "Model|CPU\\(s\\)|MHz"' },
-      { title: 'Load average', command: 'uptime' },
-      { title: 'Kernel version', command: 'uname -r' },
-      { title: 'OS release', command: 'cat /etc/os-release' },
-      { title: 'List open ports', command: 'ss -tulpn' },
-      { title: 'Who is logged in', command: 'who' },
-      { title: 'Last logins', command: 'last -n 20' },
-      { title: 'Running services', command: 'systemctl list-units --type=service --state=running' },
-      { title: 'Journal errors', command: 'journalctl -p err -n 50 --no-pager' },
-    ]
-  },
-  {
-    category: 'Network', icon: '🌐',
-    items: [
-      { title: 'IP addresses', command: 'ip addr show' },
-      { title: 'Routing table', command: 'ip route' },
-      { title: 'DNS lookup', command: 'nslookup google.com' },
-      { title: 'Ping gateway', command: 'ping -c 4 8.8.8.8' },
-      { title: 'Traceroute', command: 'traceroute google.com' },
-      { title: 'Active connections', command: 'ss -tnp' },
-      { title: 'Netstat sockets', command: 'netstat -tulpn 2>/dev/null || ss -tulpn' },
-      { title: 'Download speed test', command: 'curl -s https://raw.githubusercontent.com/sivel/speedtest-cli/master/speedtest.py | python3 -' },
-    ]
-  },
-  {
-    category: 'Docker', icon: '🐳',
-    items: [
-      { title: 'List containers', command: 'docker ps' },
-      { title: 'List all containers', command: 'docker ps -a' },
-      { title: 'List images', command: 'docker images' },
-      { title: 'Container logs (tail)', command: 'docker logs --tail 100 -f <container>' },
-      { title: 'Container stats', command: 'docker stats --no-stream' },
-      { title: 'Exec bash in container', command: 'docker exec -it <container> bash' },
-      { title: 'Prune unused images', command: 'docker image prune -f' },
-      { title: 'Prune everything', command: 'docker system prune -af' },
-      { title: 'Docker compose up', command: 'docker compose up -d' },
-      { title: 'Docker compose down', command: 'docker compose down' },
-      { title: 'Docker compose logs', command: 'docker compose logs -f --tail 100' },
-    ]
-  },
-  {
-    category: 'Nginx', icon: '⚡',
-    items: [
-      { title: 'Test config', command: 'nginx -t' },
-      { title: 'Reload', command: 'systemctl reload nginx' },
-      { title: 'Restart', command: 'systemctl restart nginx' },
-      { title: 'Status', command: 'systemctl status nginx' },
-      { title: 'Access log (tail)', command: 'tail -f /var/log/nginx/access.log' },
-      { title: 'Error log (tail)', command: 'tail -f /var/log/nginx/error.log' },
-      { title: 'List enabled sites', command: 'ls -la /etc/nginx/sites-enabled/' },
-    ]
-  },
-  {
-    category: 'Git', icon: '🔀',
-    items: [
-      { title: 'Status', command: 'git status' },
-      { title: 'Log (oneline)', command: 'git log --oneline -20' },
-      { title: 'Pull', command: 'git pull' },
-      { title: 'Fetch all', command: 'git fetch --all' },
-      { title: 'Stash', command: 'git stash' },
-      { title: 'Stash pop', command: 'git stash pop' },
-      { title: 'Reset hard to origin', command: 'git reset --hard origin/$(git branch --show-current)' },
-      { title: 'Branches', command: 'git branch -a' },
-      { title: 'Diff staged', command: 'git diff --cached' },
-    ]
-  },
-  {
-    category: 'MySQL', icon: '🗄',
-    items: [
-      { title: 'Connect root', command: 'mysql -u root -p' },
-      { title: 'List databases', command: 'mysql -u root -p -e "SHOW DATABASES;"' },
-      { title: 'Dump database', command: 'mysqldump -u root -p <dbname> > dump.sql' },
-      { title: 'Import dump', command: 'mysql -u root -p <dbname> < dump.sql' },
-      { title: 'Show processlist', command: 'mysql -u root -p -e "SHOW PROCESSLIST;"' },
-      { title: 'Check tables size', command: "mysql -u root -p -e \"SELECT table_schema, ROUND(SUM(data_length+index_length)/1024/1024,2) AS 'MB' FROM information_schema.tables GROUP BY table_schema;\"" },
-    ]
-  },
-  {
-    category: 'Firewall', icon: '🛡',
-    items: [
-      { title: 'UFW status', command: 'ufw status verbose' },
-      { title: 'Allow port 80', command: 'ufw allow 80/tcp' },
-      { title: 'Allow port 443', command: 'ufw allow 443/tcp' },
-      { title: 'iptables rules', command: 'iptables -L -n -v' },
-    ]
-  },
-  {
-    category: 'PHP / Laravel', icon: '🐘',
-    items: [
-      { title: 'PHP version', command: 'php -v' },
-      { title: 'Artisan status', command: 'php artisan about' },
-      { title: 'Clear all caches', command: 'php artisan optimize:clear' },
-      { title: 'Run migrations', command: 'php artisan migrate --force' },
-      { title: 'Queue restart', command: 'php artisan queue:restart' },
-      { title: 'Storage link', command: 'php artisan storage:link' },
-      { title: 'Composer install', command: 'composer install --no-dev --optimize-autoloader' },
-    ]
-  },
-]
+type SettingsSection = 'themes' | 'language' | 'docs'
 
-const nt = (window as any).nextterm
+// SnippetsPanel and built-in data moved to ./snippets/
 
-// --- Markdown renderer (lightweight, no deps) ---
-function renderMarkdown(text: string): string {
-  return text
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/`([^`\n]+)`/g, '<code>$1</code>')
-    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-    .replace(/^# (.+)$/gm, '<h1>$1</h1>')
-    .replace(/^[-*] (.+)$/gm, '<li>$1</li>')
-    .replace(/\n/g, '<br>')
-}
+const nt = window.nextterm
 
 // --- Toast ---
 function Toast({ message, type }: { message: string; type: 'success' | 'error' }) {
@@ -234,19 +116,32 @@ function Toast({ message, type }: { message: string; type: 'success' | 'error' }
 }
 
 // --- Confirm Modal ---
-function ConfirmModal({ message, onConfirm, onCancel }: {
-  message: string; onConfirm: () => void; onCancel: () => void
+function ConfirmModal({ message, onConfirm, onCancel, danger }: {
+  message: string; onConfirm: () => void; onCancel: () => void; danger?: boolean
 }) {
-  const { t } = useLanguage()
+  const { t, lang } = useLanguage()
   return (
     <div className="modal-overlay" onClick={onCancel}>
-      <div className="modal confirm-modal" onClick={e => e.stopPropagation()}>
+      <div className={`modal confirm-modal${danger ? ' confirm-modal--danger' : ''}`} onClick={e => e.stopPropagation()}>
+        {danger && (
+          <div className="confirm-danger-header">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            <span>{lang === 'uk' ? 'Небезпечна дія' : lang === 'de' ? 'Gefährliche Aktion' : 'Dangerous action'}</span>
+          </div>
+        )}
         <div className="modal-body">
           <p className="confirm-message">{message}</p>
         </div>
         <div className="modal-footer">
           <button className="btn-secondary" onClick={onCancel}>{t('cancel')}</button>
-          <button className="btn-primary" onClick={onConfirm}>Confirm</button>
+          <button className={danger ? 'btn-danger' : 'btn-primary'} onClick={onConfirm}>
+            {danger
+              ? (lang === 'uk' ? 'Відключити' : lang === 'de' ? 'Trennen' : 'Disconnect')
+              : 'Confirm'}
+          </button>
         </div>
       </div>
     </div>
@@ -254,24 +149,6 @@ function ConfirmModal({ message, onConfirm, onCancel }: {
 }
 
 // --- Language detection for Monaco ---
-function detectLanguage(filePath: string): string {
-  const basename = filePath.split(/[/\\]/).pop() || ''
-  if (/^dockerfile/i.test(basename)) return 'dockerfile'
-  if (/^(nginx|apache)\.conf$/i.test(basename)) return 'ini'
-  const ext = basename.split('.').pop()?.toLowerCase() || ''
-  const map: Record<string, string> = {
-    py: 'python', js: 'javascript', ts: 'typescript', tsx: 'typescript',
-    jsx: 'javascript', html: 'html', htm: 'html', css: 'css', scss: 'scss',
-    json: 'json', sh: 'shell', bash: 'shell', zsh: 'shell', fish: 'shell',
-    yml: 'yaml', yaml: 'yaml', md: 'markdown', rs: 'rust', go: 'go',
-    rb: 'ruby', php: 'php', java: 'java', cpp: 'cpp', cc: 'cpp',
-    c: 'c', cs: 'csharp', kt: 'kotlin', conf: 'ini', ini: 'ini',
-    cfg: 'ini', env: 'shell', sql: 'sql', xml: 'xml', toml: 'toml',
-    lua: 'lua', pl: 'perl', swift: 'swift', tf: 'hcl', hcl: 'hcl',
-  }
-  return map[ext] || 'plaintext'
-}
-
 // --- Update bar ---
 type UpdateState =
   | { status: 'idle' }
@@ -328,6 +205,188 @@ function UpdateBar({ state, onDownload, onInstall, onDismiss }: {
   return null
 }
 
+// --- Panic Overlay (Boss Key) ---
+type PanicTheme = 'minimal' | 'matrix' | 'starfield' | 'glitch'
+const PANIC_THEMES: PanicTheme[] = ['minimal', 'matrix', 'starfield', 'glitch']
+
+// Canvas: Matrix rain
+function MatrixCanvas() {
+  const ref = useRef<HTMLCanvasElement>(null)
+  useEffect(() => {
+    const canvas = ref.current; if (!canvas) return
+    const ctx = canvas.getContext('2d')!
+    const W = canvas.width  = window.innerWidth
+    const H = canvas.height = window.innerHeight
+    const cols = Math.floor(W / 18)
+    const drops = Array.from({ length: cols }, () => Math.random() * -H)
+    const chars = 'アイウエオカキクケコサシスセソタチツテトナニヌネノ0123456789ABCDEF'
+    let raf: number
+    const draw = () => {
+      ctx.fillStyle = 'rgba(0,0,0,0.05)'
+      ctx.fillRect(0, 0, W, H)
+      ctx.font = '15px monospace'
+      drops.forEach((y, i) => {
+        const ch = chars[Math.floor(Math.random() * chars.length)]
+        const bright = y < 30
+        ctx.fillStyle = bright ? '#ccffcc' : `rgba(0,${Math.floor(180 + Math.random()*75)},${Math.floor(Math.random()*40)},0.9)`
+        ctx.fillText(ch, i * 18, y)
+        drops[i] += 18 + Math.random() * 6
+        if (drops[i] > H + 20) drops[i] = -Math.random() * H * 0.5
+      })
+      raf = requestAnimationFrame(draw)
+    }
+    draw()
+    return () => cancelAnimationFrame(raf)
+  }, [])
+  return <canvas ref={ref} className="panic-canvas" />
+}
+
+// Canvas: Starfield warp
+function StarfieldCanvas() {
+  const ref = useRef<HTMLCanvasElement>(null)
+  useEffect(() => {
+    const canvas = ref.current; if (!canvas) return
+    const ctx = canvas.getContext('2d')!
+    canvas.width  = window.innerWidth
+    canvas.height = window.innerHeight
+    const W = canvas.width, H = canvas.height
+    const CX = W / 2, CY = H / 2
+    const stars = Array.from({ length: 220 }, () => ({
+      x: (Math.random() - 0.5) * W,
+      y: (Math.random() - 0.5) * H,
+      z: Math.random() * W,
+    }))
+    let raf: number
+    const draw = () => {
+      ctx.fillStyle = 'rgba(0,0,0,0.2)'
+      ctx.fillRect(0, 0, W, H)
+      stars.forEach(s => {
+        s.z -= 6
+        if (s.z <= 0) { s.x = (Math.random() - 0.5) * W; s.y = (Math.random() - 0.5) * H; s.z = W }
+        const sx = (s.x / s.z) * W + CX
+        const sy = (s.y / s.z) * H + CY
+        const r  = Math.max(0.3, (1 - s.z / W) * 3)
+        const bright = Math.floor((1 - s.z / W) * 255)
+        ctx.beginPath()
+        ctx.arc(sx, sy, r, 0, Math.PI * 2)
+        ctx.fillStyle = `rgba(${bright},${bright},${Math.floor(bright*0.85+40)},0.9)`
+        ctx.fill()
+      })
+      raf = requestAnimationFrame(draw)
+    }
+    draw()
+    return () => cancelAnimationFrame(raf)
+  }, [])
+  return <canvas ref={ref} className="panic-canvas" />
+}
+
+// Canvas: TV Static / Glitch
+function GlitchCanvas() {
+  const ref = useRef<HTMLCanvasElement>(null)
+  useEffect(() => {
+    const canvas = ref.current; if (!canvas) return
+    const ctx = canvas.getContext('2d')!
+    canvas.width  = window.innerWidth
+    canvas.height = window.innerHeight
+    const W = canvas.width, H = canvas.height
+    let raf: number
+    const draw = () => {
+      const img = ctx.createImageData(W, H)
+      const d   = img.data
+      for (let i = 0; i < d.length; i += 4) {
+        const v = Math.random() < 0.92 ? Math.floor(Math.random() * 28) : Math.floor(Math.random() * 160)
+        d[i]   = v
+        d[i+1] = Math.random() < 0.004 ? Math.floor(Math.random()*200) : v
+        d[i+2] = Math.random() < 0.003 ? Math.floor(Math.random()*200) : v
+        d[i+3] = 255
+      }
+      // Horizontal glitch bands
+      if (Math.random() < 0.08) {
+        const y0 = Math.floor(Math.random() * H)
+        const bh = Math.floor(Math.random() * 12) + 2
+        for (let y = y0; y < Math.min(y0 + bh, H); y++) {
+          const shift = (Math.floor(Math.random() * 40) - 20) * 4
+          for (let x = 0; x < W; x++) {
+            const src = (y * W + Math.max(0, Math.min(W - 1, x + shift / 4))) * 4
+            const dst = (y * W + x) * 4
+            d[dst]   = d[src] + 80
+            d[dst+1] = Math.floor(d[src] * 0.3)
+            d[dst+2] = d[src] + 40
+            d[dst+3] = 255
+          }
+        }
+      }
+      ctx.putImageData(img, 0, 0)
+      raf = requestAnimationFrame(draw)
+    }
+    draw()
+    return () => cancelAnimationFrame(raf)
+  }, [])
+  return <canvas ref={ref} className="panic-canvas" />
+}
+
+function PanicOverlay({ onExit }: { onExit: () => void }) {
+  const [time, setTime]   = useState(() => new Date())
+  const [theme, setTheme] = useState<PanicTheme>(() => PANIC_THEMES[Math.floor(Math.random() * PANIC_THEMES.length)])
+
+  useEffect(() => {
+    const id = setInterval(() => setTime(new Date()), 1000)
+    return () => clearInterval(id)
+  }, [])
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'h') { e.preventDefault(); onExit() }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [onExit])
+
+  const hh = time.getHours().toString().padStart(2, '0')
+  const mm = time.getMinutes().toString().padStart(2, '0')
+  const ss = time.getSeconds().toString().padStart(2, '0')
+
+  const clockColor: Record<PanicTheme, string> = {
+    minimal:  'rgba(255,255,255,0.75)',
+    matrix:   'rgba(0,255,80,0.90)',
+    starfield:'rgba(200,220,255,0.85)',
+    glitch:   'rgba(255,255,255,0.80)',
+  }
+
+  return (
+    <div className="panic-overlay" onClick={onExit}>
+      {theme === 'matrix'    && <MatrixCanvas />}
+      {theme === 'starfield' && <StarfieldCanvas />}
+      {theme === 'glitch'    && <GlitchCanvas />}
+
+      {/* Clock — center */}
+      <div className="panic-content">
+        <svg className="panic-lock-icon" width="44" height="44" viewBox="0 0 24 24" fill="none"
+          stroke={clockColor[theme]} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2" />
+          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+        </svg>
+        <div className="panic-clock" style={{ color: clockColor[theme] }}>{hh}:{mm}:{ss}</div>
+        <div className="panic-date">{time.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</div>
+        <div className="panic-hint">Press <kbd>Ctrl+Shift+H</kbd> to unlock</div>
+      </div>
+
+      {/* Theme dots — bottom center */}
+      <div className="panic-themes" onClick={e => e.stopPropagation()}>
+        {PANIC_THEMES.map(t => (
+          <button
+            key={t}
+            className={`panic-theme-dot${theme === t ? ' active' : ''}`}
+            onClick={() => setTheme(t)}
+            title={t}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// --- SSH Config Import Modal ---
 // --- Shortcuts Cheatsheet ---
 const SHORTCUTS = [
   { section: 'Terminal' },
@@ -373,8 +432,185 @@ function ShortcutsModal({ onClose }: { onClose: () => void }) {
   )
 }
 
+// --- Theme Picker ---
+function ThemePicker() {
+  const { lang, t } = useLanguage()
+  const { themeId, setThemeId } = useTheme()
+  const achCtx = useAchievements()
+  const [open, setOpen] = useState(false)
+  const wrapRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  const current = THEMES.find(th => th.id === themeId) ?? THEMES[0]
+
+  return (
+    <div className="theme-picker-wrap" ref={wrapRef}>
+      <button
+        className="status-theme-btn"
+        onClick={() => setOpen(v => !v)}
+        title={t('changeTheme')}
+      >
+        {Ico.palette()}
+        <span style={{ fontSize: 10, fontFamily: 'var(--font-ui)' }}>
+          {lang === 'uk' ? current.nameUk : lang === 'de' ? (current.nameDe ?? current.name) : current.name}
+        </span>
+      </button>
+      {open && (
+        <div className="theme-picker-popup">
+          {/* Quick picker shows only stable themes — beta themes live in
+              Settings → Themes with a BETA badge. */}
+          {THEME_GROUPS.map(group => {
+            const groupThemes = THEMES.filter(th => th.group === group.id && th.stable)
+            if (groupThemes.length === 0) return null
+            return (
+              <div key={group.id} className="theme-group">
+                <div className="theme-group-label">{lang === 'uk' ? group.labelUk : lang === 'de' ? group.labelDe : group.label}</div>
+                <div className="theme-group-items">
+                  {groupThemes.map(th => (
+                    <div
+                      key={th.id}
+                      className={`theme-item${themeId === th.id ? ' active' : ''}`}
+                      onClick={() => { if (th.id !== themeId) achCtx?.trackEvent({ type: 'theme-changed', themeId: th.id }); setThemeId(th.id); setOpen(false) }}
+                    >
+                      <div className="theme-swatch">
+                        <div className="theme-swatch-top" style={{ background: th.swatch[0] }} />
+                        <div className="theme-swatch-bot" style={{ background: th.swatch[1] }} />
+                      </div>
+                      <span className="theme-item-name">{lang === 'uk' ? th.nameUk : lang === 'de' ? (th.nameDe ?? th.name) : th.name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+          <div className="theme-picker-hint">
+            {lang === 'uk'
+              ? 'Більше тем у Налаштуваннях →'
+              : 'More themes in Settings →'}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SettingsView({ section }: { section: SettingsSection }) {
+  const { lang, setLang, t } = useLanguage()
+  const { themeId, setThemeId } = useTheme()
+  const achCtx = useAchievements()
+
+  return (
+    <div className="settings-view">
+      <div className="settings-view-header">
+        <div className="settings-view-kicker">{t('settings')}</div>
+        <h2>{section === 'language' ? t('interfaceLanguage') : t('themes')}</h2>
+      </div>
+
+      <div className="settings-grid">
+        {section === 'language' ? (
+          <section className="settings-card">
+            <div className="settings-card-title">{t('interfaceLanguage')}</div>
+            <div className="settings-pill-row">
+              {/* German is wired in i18n.ts but hidden from the picker — translation
+                  coverage isn't ready for public exposure. To re-enable, add
+                  `{ id: 'de', label: 'Deutsch' }` back to this list. */}
+              {([
+                { id: 'en', label: 'English' },
+                { id: 'uk', label: 'Українська' },
+              ] as const).map((item) => (
+                <button
+                  key={item.id}
+                  className={`settings-pill ${lang === item.id ? 'active' : ''}`}
+                  onClick={() => { if (item.id !== lang) achCtx?.trackEvent({ type: 'language-changed', lang: item.id }); setLang(item.id) }}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </section>
+        ) : (
+          <section className="settings-card settings-card--themes">
+            <div className="settings-themes-grid">
+              {THEMES.map((th) => {
+                const x = th.xterm
+                const isActive = themeId === th.id
+                return (
+                  <button
+                    key={th.id}
+                    className={`settings-theme-card ${isActive ? 'active' : ''}`}
+                    onClick={() => { if (!isActive) achCtx?.trackEvent({ type: 'theme-changed', themeId: th.id }); setThemeId(th.id) }}
+                  >
+                    <div className="settings-theme-preview" style={{ background: x.background }}>
+                      {/* Simulated terminal lines */}
+                      <div className="stp-lines">
+                        <div className="stp-line"><span style={{ color: x.green, width: '55%' }} /><span style={{ color: x.blue, width: '30%' }} /></div>
+                        <div className="stp-line"><span style={{ color: x.cyan, width: '40%' }} /></div>
+                        <div className="stp-line"><span style={{ color: x.magenta, width: '65%' }} /><span style={{ color: x.yellow, width: '15%' }} /></div>
+                        <div className="stp-line"><span style={{ color: x.blue, width: '35%' }} /></div>
+                      </div>
+                      <div className="stp-prompt" style={{ color: x.foreground }}>
+                        <span style={{ color: x.green }}>root</span>
+                        <span style={{ color: x.foreground, opacity: 0.5 }}>@server</span>
+                        <span style={{ color: x.foreground, opacity: 0.35 }}>:~$</span>
+                        <span className="stp-cursor" style={{ background: x.cursor ?? x.foreground }} />
+                      </div>
+                      {isActive && <div className="stp-check">✓</div>}
+                    </div>
+                    <div className="settings-theme-name">
+                      {lang === 'uk' ? th.nameUk : lang === 'de' ? (th.nameDe ?? th.name) : th.name}
+                      {!th.stable && <span className="settings-theme-beta">BETA</span>}
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          </section>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// --- Per-tab uptime label (mm:ss / h:mm:ss) ---
+function TabUptime({ connectedAt, status }: { connectedAt?: number; status: string }) {
+  const [label, setLabel] = useState('')
+  useEffect(() => {
+    if (!connectedAt || status !== 'connected') { setLabel(''); return }
+    const update = () => {
+      const secs = Math.floor((Date.now() - connectedAt) / 1000)
+      const h = Math.floor(secs / 3600)
+      const m = Math.floor((secs % 3600) / 60)
+      const s = secs % 60
+      setLabel(h > 0 ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}` : `${m}:${String(s).padStart(2, '0')}`)
+    }
+    update()
+    const iv = setInterval(update, 1000)
+    return () => clearInterval(iv)
+  }, [connectedAt, status])
+  if (!label) return null
+  return <span className="tab-uptime" title="Час сесії">{label}</span>
+}
+
 // --- Status Bar ---
-function StatusBar({ tab }: { tab: Tab | null }) {
+function StatusBar({
+  tab, onPanic, hasUnreadChat, chatPanelOpen, onOpenChat,
+}: {
+  tab: Tab | null
+  onPanic: () => void
+  hasUnreadChat: boolean
+  /** True when the chat side-panel is currently visible (icon shows "active" state). */
+  chatPanelOpen: boolean
+  /** Toggle chat panel open/closed. When closed, opening it; when open, collapsing back to terminal. */
+  onOpenChat: () => void
+}) {
   const { t, lang, setLang } = useLanguage()
   const [uptime, setUptime] = useState('')
   const [ipVisible, setIpVisible] = useState(false)
@@ -419,7 +655,7 @@ function StatusBar({ tab }: { tab: Tab | null }) {
             className="status-item status-dim status-host"
             style={{ fontFamily: '"JetBrains Mono", monospace', cursor: 'pointer', userSelect: 'none' }}
             onClick={() => setIpVisible(v => !v)}
-            title={ipVisible ? 'Click to hide' : 'Click to reveal'}
+            title={ipVisible ? t('hideConnection') : t('revealConnection')}
           >
             {tab.server.username}@{ipVisible ? `${tab.server.host}:${tab.server.port}` : '••••••••'}
           </span>
@@ -437,14 +673,39 @@ function StatusBar({ tab }: { tab: Tab | null }) {
           )}
         </>
       )}
-      {/* Language toggle — always visible on the right */}
+      {/* Theme picker + Language toggle — always visible on the right */}
       <div className="status-spacer" />
+      <ThemePicker />
       <button
         className="status-lang-btn"
         onClick={() => setLang(lang === 'en' ? 'uk' : 'en')}
-        title={lang === 'en' ? 'Switch to Ukrainian' : 'Перемкнути на English'}
+        title={t('switchLanguage')}
       >
-        {t('langToggle')}
+        {lang === 'en' ? 'EN' : lang === 'uk' ? 'UK' : 'DE'}
+      </button>
+      <button
+        className={`status-chat-btn${hasUnreadChat ? ' status-chat-btn--unread' : ''}${chatPanelOpen ? ' on' : ''}`}
+        onClick={onOpenChat}
+        title={lang === 'uk'
+          ? (hasUnreadChat ? 'Чат — є непрочитані' : 'Чат')
+          : lang === 'de'
+          ? (hasUnreadChat ? 'Chat — ungelesen' : 'Chat')
+          : (hasUnreadChat ? 'Chat — unread' : 'Chat')}
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        </svg>
+      </button>
+      <button
+        className="status-panic-btn"
+        onClick={onPanic}
+        title={lang === 'uk' ? 'Boss Key — сховати термінал (Ctrl+Shift+H)' : lang === 'de' ? 'Boss Key — Terminal ausblenden (Ctrl+Shift+H)' : 'Boss Key — hide terminal (Ctrl+Shift+H)'}
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2"/>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
       </button>
     </div>
   )
@@ -510,679 +771,7 @@ function HostKeyModal({
   )
 }
 
-// --- SSH Key Picker ---
-const KEY_TYPE_LABEL: Record<string, string> = {
-  openssh: 'OpenSSH', pem: 'PEM', ppk: 'PPK',
-  ed25519: 'Ed25519', ecdsa: 'ECDSA', rsa: 'RSA', dsa: 'DSA',
-  private: 'Private key',
-  public: '⚠ Public key', unknown: '⚠ Unknown',
-}
 
-interface SshKey { name: string; path: string; keyType: string; encrypted: boolean }
-
-function SshKeyPicker({
-  value, onChange, onEncryptedChange,
-}: {
-  value: string
-  onChange: (path: string) => void
-  onEncryptedChange?: (encrypted: boolean) => void
-}) {
-  const { t } = useLanguage()
-  const [keys, setKeys] = useState<SshKey[]>([])
-  const [loading, setLoading] = useState(true)
-  const [warning, setWarning] = useState('')
-  const [generating, setGenerating] = useState(false)
-  const [genForm, setGenForm] = useState({ type: 'ed25519' as 'ed25519' | 'rsa', name: 'id_ed25519', passphrase: '' })
-  const [genResult, setGenResult] = useState<string | null>(null)
-
-  const reloadKeys = () => {
-    nt?.listSshKeys().then((list: SshKey[]) => setKeys(list || []))
-  }
-
-  useEffect(() => {
-    nt?.listSshKeys().then((list: SshKey[]) => { setKeys(list || []); setLoading(false) })
-  }, [])
-
-  const browse = async () => {
-    const result = await nt?.selectSshKey()
-    if (!result) return
-    const { path: filePath, keyType, encrypted } = result
-    if (keyType === 'public') {
-      setWarning(`"${filePath.split(/[/\\]/).pop()}" — це ПУБЛІЧНИЙ ключ, він не підходить для входу. Оберіть приватний ключ (без .pub).`)
-      return
-    }
-    if (keyType === 'unknown') {
-      setWarning(`Не вдалося визначити тип ключа. Переконайтесь що це OpenSSH або PEM приватний ключ.`)
-    } else {
-      setWarning('')
-    }
-    onChange(filePath)
-    onEncryptedChange?.(encrypted)
-  }
-
-  const selectKey = (k: SshKey) => {
-    if (value === k.path) { onChange(''); setWarning(''); onEncryptedChange?.(false); return }
-    setWarning('')
-    onChange(k.path)
-    onEncryptedChange?.(k.encrypted)
-  }
-
-  const filename = value ? value.split(/[/\\]/).pop() : ''
-  const selectedKey = keys.find(k => k.path === value)
-
-  return (
-    <div className="key-picker">
-      {!loading && keys.length > 0 && (
-        <div className="key-list">
-          {keys.map(k => (
-            <div key={k.path} className={`key-item ${value === k.path ? 'active' : ''}`} onClick={() => selectKey(k)}>
-              <span className="key-icon">{Ico.key(14)}</span>
-              <span className="key-name">{k.name}</span>
-              <span className="key-type-badge">{KEY_TYPE_LABEL[k.keyType] || k.keyType}</span>
-              {k.encrypted && <span className="key-enc-badge">passphrase</span>}
-              {value === k.path && <span className="key-check">✓</span>}
-            </div>
-          ))}
-        </div>
-      )}
-      {!loading && keys.length === 0 && <div className="key-empty">Приватних ключів в ~/.ssh не знайдено</div>}
-
-      <div className="key-browse-row">
-        <button className="btn-secondary btn-key-browse" onClick={browse}>
-          {Ico.folder(13)} {value
-            ? `${filename}${selectedKey?.encrypted ? ' (passphrase)' : ''}`
-            : t('chooseKeyFile')}
-        </button>
-        {value && <button className="btn-clear-key" onClick={() => { onChange(''); setWarning(''); onEncryptedChange?.(false) }}>✕</button>}
-        <button className="btn-secondary btn-genkey" onClick={() => { setGenerating(v => !v); setGenResult(null) }}>
-          {t('generateKey')}
-        </button>
-      </div>
-
-      {/* Key generation panel */}
-      {generating && (
-        <div className="keygen-panel">
-          <div className="keygen-row">
-            <label>{t('keyType')}</label>
-            <select value={genForm.type} onChange={e => {
-              const t = e.target.value as 'ed25519' | 'rsa'
-              setGenForm(f => ({ ...f, type: t, name: t === 'rsa' ? 'id_rsa' : 'id_ed25519' }))
-            }}>
-              <option value="ed25519">{t('keyTypeEd25519')}</option>
-              <option value="rsa">{t('keyTypeRsa')}</option>
-            </select>
-          </div>
-          <div className="keygen-row">
-            <label>{t('keyFilename')}</label>
-            <input value={genForm.name} onChange={e => setGenForm(f => ({ ...f, name: e.target.value }))} placeholder="id_ed25519" />
-          </div>
-          <div className="keygen-row">
-            <label>{t('keyPassphrase')}</label>
-            <input type="password" value={genForm.passphrase} onChange={e => setGenForm(f => ({ ...f, passphrase: e.target.value }))} placeholder={t('optional')} />
-          </div>
-          <button className="btn-primary btn-genkey-run" onClick={async () => {
-            try {
-              const res = await nt?.generateSshKey(genForm.type, genForm.name, genForm.passphrase || undefined)
-              if (res) {
-                setGenResult(`${t('keyGenerated')}${res.private_path}`)
-                onChange(res.private_path)
-                onEncryptedChange?.(!!genForm.passphrase)
-                reloadKeys()
-                setGenerating(false)
-              }
-            } catch (e: unknown) {
-              setGenResult(`${t('keyGenError')}${e instanceof Error ? e.message : String(e)}`)
-            }
-          }}>{t('generateKeyPair')}</button>
-          {genResult && <div className={`keygen-result ${genResult.startsWith('✓') ? 'ok' : 'err'}`}>{genResult}</div>}
-        </div>
-      )}
-
-      {warning && <div className="key-warning">⚠ {warning}</div>}
-    </div>
-  )
-}
-
-// --- Server Modal (Add + Edit) ---
-function ServerModal({
-  existing, onSave, onClose,
-}: {
-  existing?: Server
-  onSave: (s: Server, connect: boolean) => void
-  onClose: () => void
-}) {
-  const { t } = useLanguage()
-  const isEdit = !!existing
-  const initMode = existing?.useAgent ? 'agent' : existing?.privateKeyPath ? 'key' : 'password'
-  const [form, setForm] = useState({
-    name: existing?.name || '',
-    host: existing?.host || '',
-    port: String(existing?.port || '22'),
-    username: existing?.username || '',
-    password: existing?.password || '',
-    privateKeyPath: existing?.privateKeyPath || '',
-    passphrase: existing?.passphrase || '',
-    color: existing?.color || '#00d4aa',
-  })
-  const [authMode, setAuthMode] = useState<'password' | 'key' | 'agent'>(initMode)
-  const [keyEncrypted, setKeyEncrypted] = useState(false)
-  const [agentAvailable, setAgentAvailable] = useState<boolean | null>(null)
-  const [useJump, setUseJump] = useState(!!existing?.jumpHost)
-  const [jump, setJump] = useState({
-    host: existing?.jumpHost?.host || '',
-    port: String(existing?.jumpHost?.port || '22'),
-    username: existing?.jumpHost?.username || '',
-    password: existing?.jumpHost?.password || '',
-    privateKeyPath: existing?.jumpHost?.privateKeyPath || '',
-    authMode: existing?.jumpHost?.useAgent ? 'agent' : existing?.jumpHost?.privateKeyPath ? 'key' : 'password' as 'password' | 'key' | 'agent',
-  })
-  const colors = ['#00d4aa', '#7c6af7', '#f7706a', '#f0a500', '#4fc3f7', '#e91e8c']
-
-  // Перевіряємо SSH agent при відкритті
-  useEffect(() => {
-    nt?.detectSshAgent().then((r: { available: boolean }) => setAgentAvailable(r?.available ?? false))
-  }, [])
-
-  const buildServer = (): Server => ({
-    id: existing?.id || Date.now().toString(),
-    name: form.name || form.host,
-    host: form.host,
-    port: parseInt(form.port) || 22,
-    username: form.username,
-    useAgent: authMode === 'agent' || undefined,
-    password: authMode === 'password' ? (form.password || undefined) : undefined,
-    privateKeyPath: authMode === 'key' ? (form.privateKeyPath || undefined) : undefined,
-    passphrase: authMode === 'key' ? (form.passphrase || undefined) : undefined,
-    color: form.color,
-    jumpHost: useJump && jump.host && jump.username ? {
-      host: jump.host,
-      port: parseInt(jump.port) || 22,
-      username: jump.username,
-      useAgent: jump.authMode === 'agent' || undefined,
-      password: jump.authMode === 'password' ? (jump.password || undefined) : undefined,
-      privateKeyPath: jump.authMode === 'key' ? (jump.privateKeyPath || undefined) : undefined,
-    } : undefined,
-  })
-
-  const valid = !!form.host && !!form.username
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal" onClick={e => e.stopPropagation()}>
-        <div className="modal-header">
-          <span>{isEdit ? t('editConnection') : t('newConnection2')}</span>
-          <button className="modal-close" onClick={onClose}>✕</button>
-        </div>
-        <div className="modal-body">
-          <label>{t('fieldName')}</label>
-          <input placeholder={t('placeholderName')} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
-          <label>{t('fieldHost')}</label>
-          <input placeholder={t('placeholderHost')} value={form.host} onChange={e => setForm({ ...form, host: e.target.value })} />
-          <div className="form-row">
-            <div>
-              <label>{t('fieldPort')}</label>
-              <input placeholder="22" value={form.port} onChange={e => setForm({ ...form, port: e.target.value })} />
-            </div>
-            <div>
-              <label>{t('fieldUsername')}</label>
-              <input placeholder={t('placeholderUsername')} value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} />
-            </div>
-          </div>
-
-          <div className="auth-tabs">
-            <button className={`auth-tab ${authMode === 'password' ? 'active' : ''}`} onClick={() => setAuthMode('password')}>{Ico.lock(13)} {t('authPassword')}</button>
-            <button className={`auth-tab ${authMode === 'key' ? 'active' : ''}`} onClick={() => setAuthMode('key')}>{Ico.key(13)} {t('authKey')}</button>
-            {/* Agent tab — shown only when agent is available (Pageant/OpenSSH running) */}
-            {agentAvailable === true && (
-              <button className={`auth-tab ${authMode === 'agent' ? 'active' : ''}`} onClick={() => setAuthMode('agent')}>
-                {Ico.agent(13)} {t('authAgent')} ✓
-              </button>
-            )}
-          </div>
-
-          {authMode === 'password' && (
-            <>
-              <label>{t('fieldPassword')}</label>
-              <input type="password" placeholder={t('placeholderPassword')} value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} />
-            </>
-          )}
-
-          {authMode === 'key' && (
-            <>
-              <label>{t('fieldSshKey')}</label>
-              <SshKeyPicker
-                value={form.privateKeyPath}
-                onChange={p => setForm({ ...form, privateKeyPath: p })}
-                onEncryptedChange={setKeyEncrypted}
-              />
-              {keyEncrypted && (
-                <div className="key-warning" style={{ marginBottom: 6 }}>
-                  🔐 {t('encryptedKeyWarning')}
-                </div>
-              )}
-              <label style={{ marginTop: 6 }}>
-                {t('fieldPassphrase')}
-                {keyEncrypted
-                  ? <span style={{ color: 'var(--red)', marginLeft: 4 }}>{t('passphraseRequired')}</span>
-                  : <span style={{ color: 'var(--text3)', fontWeight: 400, marginLeft: 4 }}>{t('passphraseIfEncrypted')}</span>}
-              </label>
-              <input
-                type="password"
-                placeholder={t('placeholderPassphrase')}
-                value={form.passphrase}
-                onChange={e => setForm({ ...form, passphrase: e.target.value })}
-                style={keyEncrypted && !form.passphrase ? { borderColor: 'var(--red)' } : {}}
-              />
-            </>
-          )}
-
-          {authMode === 'agent' && (
-            <div className={`agent-info ${agentAvailable ? 'agent-ok' : 'agent-err'}`}>
-              {agentAvailable === true && <>
-                <span>✓</span>
-                <div>
-                  <strong>{t('agentFound')}</strong>
-                  <div>{t('agentKeys')}</div>
-                </div>
-              </>}
-              {agentAvailable === false && <>
-                <span>✗</span>
-                <div>
-                  <strong>{t('agentNotFound')}</strong>
-                  <div>{t('agentInstructions')}</div>
-                </div>
-              </>}
-              {agentAvailable === null && <div>{t('checkingAgent')}</div>}
-            </div>
-          )}
-
-          {/* ── Jump Host ─────────────────────────────────────────── */}
-          <div className="jump-host-toggle" onClick={() => setUseJump(v => !v)}>
-            <span className="jump-host-chevron" style={{ transform: useJump ? 'rotate(90deg)' : 'none' }}>›</span>
-            <span>{t('proxyJump')}</span>
-            {useJump && <span className="jump-host-badge">ON</span>}
-          </div>
-
-          {useJump && (
-            <div className="jump-host-body">
-              <div className="form-row">
-                <div>
-                  <label>{t('jumpHostLabel')}</label>
-                  <input placeholder="bastion.company.com" value={jump.host}
-                    onChange={e => setJump({ ...jump, host: e.target.value })} />
-                </div>
-                <div>
-                  <label>{t('fieldPort')}</label>
-                  <input placeholder="22" value={jump.port}
-                    onChange={e => setJump({ ...jump, port: e.target.value })} />
-                </div>
-              </div>
-              <label>{t('fieldUsername')}</label>
-              <input placeholder="ubuntu" value={jump.username}
-                onChange={e => setJump({ ...jump, username: e.target.value })} />
-
-              <div className="auth-tabs" style={{ marginTop: 8 }}>
-                <button className={`auth-tab ${jump.authMode === 'password' ? 'active' : ''}`}
-                  onClick={() => setJump({ ...jump, authMode: 'password' })}>{Ico.lock(12)} {t('authPassword')}</button>
-                <button className={`auth-tab ${jump.authMode === 'key' ? 'active' : ''}`}
-                  onClick={() => setJump({ ...jump, authMode: 'key' })}>{Ico.key(12)} {t('authKey')}</button>
-                <button className={`auth-tab ${jump.authMode === 'agent' ? 'active' : ''}`}
-                  onClick={() => setJump({ ...jump, authMode: 'agent' })}>{Ico.agent(12)} {t('authAgent')}</button>
-              </div>
-
-              {jump.authMode === 'password' && (
-                <>
-                  <label>{t('fieldPassword')}</label>
-                  <input type="password" placeholder={t('placeholderPassword')} value={jump.password}
-                    onChange={e => setJump({ ...jump, password: e.target.value })} />
-                </>
-              )}
-              {jump.authMode === 'key' && (
-                <>
-                  <label>{t('fieldSshKey')}</label>
-                  <input placeholder={t('placeholderKeyPath')} value={jump.privateKeyPath}
-                    onChange={e => setJump({ ...jump, privateKeyPath: e.target.value })} />
-                </>
-              )}
-              {jump.authMode === 'agent' && (
-                <div className={`agent-info ${agentAvailable ? 'agent-ok' : 'agent-err'}`}
-                  style={{ margin: '6px 0 0' }}>
-                  <span>{agentAvailable ? '✓' : '✗'}</span>
-                  <div>{agentAvailable ? 'Agent доступний' : 'SSH Agent не знайдено'}</div>
-                </div>
-              )}
-            </div>
-          )}
-
-          <label>{t('fieldColor')}</label>
-          <div className="color-row">
-            {colors.map(c => (
-              <div key={c} className={`color-dot ${form.color === c ? 'active' : ''}`} style={{ background: c }} onClick={() => setForm({ ...form, color: c })} />
-            ))}
-          </div>
-        </div>
-        <div className="modal-footer">
-          <button className="btn-secondary" onClick={onClose}>{t('cancel')}</button>
-          {isEdit ? (
-            <>
-              <button className="btn-secondary" disabled={!valid} onClick={() => valid && onSave(buildServer(), false)}>{t('save')}</button>
-              <button className="btn-primary" disabled={!valid} onClick={() => valid && onSave(buildServer(), true)}>{t('saveAndConnect')}</button>
-            </>
-          ) : (
-            <>
-              <button className="btn-secondary" disabled={!valid} onClick={() => valid && onSave(buildServer(), false)}>{t('saveOnly')}</button>
-              <button className="btn-primary" disabled={!valid} onClick={() => valid && onSave(buildServer(), true)}>{t('connect')}</button>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// --- Notes Panel ---
-// Highlight matching substring in text
-function highlight(text: string, query: string): React.ReactNode {
-  if (!query) return text
-  const idx = text.toLowerCase().indexOf(query.toLowerCase())
-  if (idx === -1) return text
-  return (
-    <>
-      {text.slice(0, idx)}
-      <mark className="note-highlight">{text.slice(idx, idx + query.length)}</mark>
-      {text.slice(idx + query.length)}
-    </>
-  )
-}
-
-function NotesPanel({ serverId, visible }: { serverId: string | null; visible: boolean }) {
-  const { t } = useLanguage()
-  const [notes, setNotes] = useState<Note[]>([])
-  const [expanded, setExpanded] = useState<string | null>(null)
-  const [editing, setEditing] = useState<Note | null>(null)
-  const [search, setSearch] = useState('')
-  const searchRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => {
-    if (!serverId) { setNotes([]); setSearch(''); return }
-    nt?.getNotes(serverId).then((n: Note[]) => setNotes(n || []))
-  }, [serverId])
-
-  const save = async (note: Note) => {
-    if (!serverId) return
-    const updated = { ...note, updatedAt: new Date().toISOString() }
-    await nt?.saveNote(serverId, updated)
-    setNotes(prev => {
-      const idx = prev.findIndex(n => n.id === note.id)
-      if (idx >= 0) { const arr = [...prev]; arr[idx] = updated; return arr }
-      return [...prev, updated]
-    })
-    setEditing(null)
-  }
-
-  const del = async (id: string) => {
-    if (!serverId) return
-    await nt?.deleteNote(serverId, id)
-    setNotes(prev => prev.filter(n => n.id !== id))
-  }
-
-  const newNote = () => setEditing({ id: Date.now().toString(), title: 'New Note', content: '', updatedAt: '' })
-
-  const exportMarkdown = async () => {
-    if (!serverId || notes.length === 0) return
-    const md = notes.map(n => `# ${n.title}\n\n${n.content || '_Empty_'}`).join('\n\n---\n\n')
-    const serverName = serverId.replace(/[^a-z0-9]/gi, '_')
-    await nt?.saveMarkdown(`notes_${serverName}.md`, md)
-  }
-
-  const q = search.trim().toLowerCase()
-
-  const filtered = notes.filter(n =>
-    !q || n.title.toLowerCase().includes(q) || n.content.toLowerCase().includes(q)
-  )
-
-  // Auto-expand the only match, or all matches when searching
-  const isExpanded = (id: string) => {
-    if (q) return filtered.some(n => n.id === id)
-    return expanded === id
-  }
-
-  return (
-    <div className={`notes-panel${visible ? '' : ' notes-panel--collapsed'}`}>
-      <div className="notes-header">
-        <span>{t('notes')}</span>
-        <div className="notes-header-actions">
-          {notes.length > 0 && (
-            <button className="notes-icon-btn" onClick={exportMarkdown} title={t('exportNotes')}>↓</button>
-          )}
-          <button className="notes-icon-btn" onClick={newNote} title={t('newNote')}>+</button>
-        </div>
-      </div>
-
-      {/* Search bar — shown only when there are notes */}
-      {notes.length > 0 && (
-        <div className="notes-search">
-          <input
-            ref={searchRef}
-            placeholder={t('searchNotes')}
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-          {search && (
-            <button className="notes-search-clear" onClick={() => { setSearch(''); searchRef.current?.focus() }}>✕</button>
-          )}
-        </div>
-      )}
-
-      <div className="notes-list">
-        {notes.length === 0 && (
-          <div className="notes-empty">{t('noNotes').split('\n').map((line, i) => <span key={i}>{line}{i === 0 ? <br /> : ''}</span>)}</div>
-        )}
-        {notes.length > 0 && filtered.length === 0 && (
-          <div className="notes-empty">{t('noNotesMatch')}<br />"{search}"</div>
-        )}
-        {filtered.map(note => (
-          <div key={note.id} className={`note-item ${isExpanded(note.id) ? 'note-expanded' : ''}`}>
-            <div className="note-title-row" onClick={() => !q && setExpanded(expanded === note.id ? null : note.id)}>
-              <span className="note-title">{highlight(note.title, search)}</span>
-              <div className="note-actions">
-                <button onClick={e => { e.stopPropagation(); setEditing(note) }}>✏️</button>
-                <button onClick={e => { e.stopPropagation(); del(note.id) }}>🗑</button>
-              </div>
-            </div>
-            {isExpanded(note.id) && (
-              <div
-                className="note-preview md-preview"
-                dangerouslySetInnerHTML={{
-                  __html: note.content
-                    ? (q
-                        // When searching: highlight matches in rendered markdown
-                        ? renderMarkdown(note.content).replace(
-                            new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'),
-                            '<mark class="note-highlight">$1</mark>'
-                          )
-                        : renderMarkdown(note.content))
-                    : '<em>Empty note</em>'
-                }}
-              />
-            )}
-          </div>
-        ))}
-      </div>
-
-      {editing && (
-        <div className="modal-overlay" onClick={() => setEditing(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <span>{notes.some(n => n.id === editing.id) ? t('editNote') : t('newNoteTitle')}</span>
-              <button className="modal-close" onClick={() => setEditing(null)}>✕</button>
-            </div>
-            <div className="modal-body">
-              <label>{t('noteTitle')}</label>
-              <input value={editing.title} onChange={e => setEditing({ ...editing, title: e.target.value })} />
-              <label>{t('noteContent')}</label>
-              <textarea rows={12} value={editing.content} onChange={e => setEditing({ ...editing, content: e.target.value })} />
-            </div>
-            <div className="modal-footer">
-              <button className="btn-secondary" onClick={() => setEditing(null)}>{t('cancel')}</button>
-              <button className="btn-primary" onClick={() => save(editing)}>{t('save')}</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// --- Snippets Panel ---
-function SnippetsPanel({
-  onInsert, onRun,
-}: {
-  onInsert: (cmd: string) => void
-  onRun: (cmd: string) => void
-}) {
-  const { t } = useLanguage()
-  const [tab, setTab] = useState<'mine' | 'library'>('mine')
-  const [snippets, setSnippets] = useState<Snippet[]>([])
-  const [search, setSearch] = useState('')
-  const [editing, setEditing] = useState<Snippet | null>(null)
-  const [expandedCat, setExpandedCat] = useState<string | null>(null)
-
-  useEffect(() => {
-    nt?.getSnippets().then((s: Snippet[]) => setSnippets(s || []))
-  }, [])
-
-  const save = async (sn: Snippet) => {
-    await nt?.saveSnippet(sn)
-    setSnippets(prev => {
-      const idx = prev.findIndex(x => x.id === sn.id)
-      if (idx >= 0) { const a = [...prev]; a[idx] = sn; return a }
-      return [...prev, sn]
-    })
-    setEditing(null)
-  }
-
-  const del = async (id: string) => {
-    await nt?.deleteSnippet(id)
-    setSnippets(prev => prev.filter(s => s.id !== id))
-  }
-
-  const newSnippet = (): Snippet => ({ id: Date.now().toString(), title: '', command: '', description: '' })
-
-  const q = search.toLowerCase()
-
-  // Mine tab
-  const filtered = snippets.filter(s =>
-    !q || s.title.toLowerCase().includes(q) || s.command.toLowerCase().includes(q) || (s.description || '').toLowerCase().includes(q)
-  )
-
-  // Library tab
-  const libFiltered = SNIPPET_LIBRARY.map(cat => ({
-    ...cat,
-    items: cat.items.filter(it =>
-      !q || it.title.toLowerCase().includes(q) || it.command.toLowerCase().includes(q)
-    )
-  })).filter(cat => cat.items.length > 0)
-
-  return (
-    <div className="snippets-panel">
-      <div className="snippets-tabs">
-        <button className={`snip-tab ${tab === 'mine' ? 'active' : ''}`} onClick={() => setTab('mine')}>{t('mySnippets')}</button>
-        <button className={`snip-tab ${tab === 'library' ? 'active' : ''}`} onClick={() => setTab('library')}>{t('library')}</button>
-      </div>
-
-      <div className="snippets-search">
-        <input
-          placeholder={t('searchSnippets')}
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-        />
-        {search && <button className="snip-search-clear" onClick={() => setSearch('')}>✕</button>}
-      </div>
-
-      {tab === 'mine' && (
-        <div className="snippets-list">
-          {filtered.length === 0 && (
-            <div className="snip-empty">
-              {search ? t('noMatches') : t('noSnippets').split('\n').map((line, i) => <span key={i}>{line}{i === 0 ? <br /> : ''}</span>)}
-            </div>
-          )}
-          {filtered.map(sn => (
-            <div key={sn.id} className="snip-item">
-              <div className="snip-title">{sn.title || <em>Untitled</em>}</div>
-              <div className="snip-command">{sn.command}</div>
-              {sn.description && <div className="snip-desc">{sn.description}</div>}
-              <div className="snip-actions">
-                <button className="snip-btn snip-insert" title={t('insertSnippet')} onClick={() => onInsert(sn.command)}>Insert</button>
-                <button className="snip-btn snip-run" title={t('runSnippet')} onClick={() => onRun(sn.command)}>▶ Run</button>
-                <button className="snip-btn snip-edit" title={t('editSnippet')} onClick={() => setEditing(sn)}>✏</button>
-                <button className="snip-btn snip-del" title={t('deleteSnippet')} onClick={() => del(sn.id)}>🗑</button>
-              </div>
-            </div>
-          ))}
-          <button className="snip-add-btn" onClick={() => setEditing(newSnippet())}>{t('newSnippetBtn')}</button>
-        </div>
-      )}
-
-      {tab === 'library' && (
-        <div className="snippets-list">
-          {libFiltered.map(cat => (
-            <div key={cat.category} className="snip-category">
-              <div
-                className={`snip-cat-header ${expandedCat === cat.category ? 'expanded' : ''}`}
-                onClick={() => setExpandedCat(prev => prev === cat.category ? null : cat.category)}
-              >
-                <span>{cat.icon} {cat.category}</span>
-                <span className="snip-cat-count">{cat.items.length}</span>
-                <span className="snip-cat-arrow">{expandedCat === cat.category ? '▾' : '▸'}</span>
-              </div>
-              {expandedCat === cat.category && cat.items.map((it, i) => (
-                <div key={i} className="snip-item snip-lib-item">
-                  <div className="snip-title">{it.title}</div>
-                  <div className="snip-command">{it.command}</div>
-                  {it.description && <div className="snip-desc">{it.description}</div>}
-                  <div className="snip-actions">
-                    <button className="snip-btn snip-insert" onClick={() => onInsert(it.command)}>Insert</button>
-                    <button className="snip-btn snip-run" onClick={() => onRun(it.command)}>▶ Run</button>
-                    <button className="snip-btn snip-save-lib" title={t('saveToSnippets')}
-                      onClick={() => save({ id: Date.now().toString(), title: it.title, command: it.command, description: it.description })}>
-                      + {t('save')}
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ))}
-          {libFiltered.length === 0 && <div className="snip-empty">{t('noMatches')}</div>}
-        </div>
-      )}
-
-      {/* Edit modal */}
-      {editing && (
-        <div className="modal-overlay" onClick={() => setEditing(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <span>{editing.id && snippets.some(s => s.id === editing.id) ? t('editSnippetTitle') : t('newSnippetTitle')}</span>
-              <button className="modal-close" onClick={() => setEditing(null)}>✕</button>
-            </div>
-            <div className="modal-body">
-              <label>{t('snippetTitle')}</label>
-              <input placeholder={t('snippetTitlePlaceholder')} value={editing.title} onChange={e => setEditing({ ...editing, title: e.target.value })} />
-              <label>{t('snippetCommand')}</label>
-              <textarea rows={4} className="snip-cmd-input" placeholder={t('snippetCommandPlaceholder')} value={editing.command} onChange={e => setEditing({ ...editing, command: e.target.value })} />
-              <label>{t('snippetDescription')} <span style={{ opacity: 0.5, fontWeight: 400 }}>{t('optional')}</span></label>
-              <input placeholder={t('snippetDescPlaceholder')} value={editing.description || ''} onChange={e => setEditing({ ...editing, description: e.target.value })} />
-            </div>
-            <div className="modal-footer">
-              <button className="btn-secondary" onClick={() => setEditing(null)}>{t('cancel')}</button>
-              <button className="btn-primary" onClick={() => { if (editing.title && editing.command) save(editing) }}>{t('save')}</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
 
 // ── applyResize: let CSS flex do the layout, FitAddon reads computed size ──
 // FitAddon uses getComputedStyle(container).height which IS updated by CSS layout
@@ -1251,8 +840,9 @@ function applyResize(
 }
 
 // --- Terminal Tab ---
-function TerminalPane({ tab, active, onReconnect, inSplit }: { tab: Tab; active: boolean; onReconnect: () => void; inSplit?: boolean }) {
+function TerminalPane({ tab, active, onReconnect, inSplit, onInput, onOpenHistory }: { tab: Tab; active: boolean; onReconnect: () => void; inSplit?: boolean; onInput?: (data: string) => void; onOpenHistory?: (serverId: string, serverName: string) => void }) {
   const { t } = useLanguage()
+  const { themeId } = useTheme()
   const outerRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
@@ -1260,6 +850,11 @@ function TerminalPane({ tab, active, onReconnect, inSplit }: { tab: Tab; active:
   const sessionIdRef = useRef<string | null>(tab.sessionId)
   const statusRef = useRef(tab.status)
   const onReconnectRef = useRef(onReconnect)
+  const onInputRef = useRef(onInput)
+  const onOpenHistoryRef = useRef(onOpenHistory)
+  // Per-terminal buffer for command history capture. Accumulates printable chars
+  // until Enter; cleared on escape sequences (arrow keys etc.).
+  const cmdBufRef = useRef('')
 
   // Context menu
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null)
@@ -1282,7 +877,16 @@ function TerminalPane({ tab, active, onReconnect, inSplit }: { tab: Tab; active:
   useEffect(() => { sessionIdRef.current = tab.sessionId }, [tab.sessionId])
   useEffect(() => { statusRef.current = tab.status }, [tab.status])
   useEffect(() => { onReconnectRef.current = onReconnect }, [onReconnect])
+  useEffect(() => { onInputRef.current = onInput }, [onInput])
+  useEffect(() => { onOpenHistoryRef.current = onOpenHistory }, [onOpenHistory])
   useEffect(() => { showSearchRef.current = showSearch }, [showSearch])
+
+  // ── Update xterm theme when app theme changes ────────────────────────────
+  useEffect(() => {
+    const term = termRef.current
+    if (!term) return
+    term.options.theme = getXtermTheme(themeId)
+  }, [themeId])
 
   useEffect(() => {
     if (showSearch) setTimeout(() => searchInputRef.current?.focus(), 50)
@@ -1344,24 +948,34 @@ function TerminalPane({ tab, active, onReconnect, inSplit }: { tab: Tab; active:
         drawBoldTextInBrightColors: false,
         letterSpacing: 0,
         lineHeight: 1.2,
-        theme: {
-          background: '#0f0f14',
-          foreground: '#cdd6f4',
-          cursor: '#00d4aa',
-          selectionBackground: '#313244',
-          black: '#1e1e2e', red: '#f38ba8', green: '#a6e3a1', yellow: '#f9e2af',
-          blue: '#89b4fa', magenta: '#cba6f7', cyan: '#89dceb', white: '#cdd6f4',
-          brightBlack: '#585b70', brightRed: '#f38ba8', brightGreen: '#a6e3a1',
-          brightYellow: '#f9e2af', brightBlue: '#89b4fa', brightMagenta: '#cba6f7',
-          brightCyan: '#89dceb', brightWhite: '#a6adc8',
-        },
+        theme: getXtermTheme(themeId),
         cursorBlink: true,
         scrollback: 131072,   // 128K lines — SecureCRT standard
+        convertEol: true,     // convert \n → \r\n (fixes Windows ConPTY output)
       })
 
       fit = new FitAddon()
       term.loadAddon(fit)
       term.open(containerRef.current)
+
+      // ── OSC 52: remote → local clipboard sync ─────────────────────────────
+      // Format: ESC ] 52 ; <selection> ; <base64 | ?> BEL
+      // We handle writes only (selection 'c' or 'p' or 's'); reads are ignored
+      // to prevent remote programs from exfiltrating the local clipboard.
+      term.parser.registerOscHandler(52, (data: string) => {
+        const semi = data.indexOf(';')
+        if (semi < 0) return false
+        const payload = data.slice(semi + 1)
+        if (payload === '?' || payload === '') return true  // ignore reads
+        try {
+          const bin = atob(payload)
+          const bytes = new Uint8Array(bin.length)
+          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+          const text = new TextDecoder('utf-8').decode(bytes)
+          if (text) navigator.clipboard.writeText(text).catch(() => {})
+        } catch { /* malformed base64 — ignore */ }
+        return true
+      })
 
       // Initial fit — retry every frame until xterm renderer has cell dimensions
       let attempts = 0
@@ -1382,7 +996,31 @@ function TerminalPane({ tab, active, onReconnect, inSplit }: { tab: Tab; active:
 
       // Input / key handlers — only once per terminal lifetime
       term.onData((data) => {
-        if (sessionIdRef.current) nt?.sshSendInput(sessionIdRef.current, data)
+        // Capture typed commands into per-server history. Best-effort buffer
+        // that echoes the user's input before SSH processes it. Escape sequences
+        // (arrow keys, Ctrl-R etc.) abort the current buffer.
+        for (let i = 0; i < data.length; i++) {
+          const ch = data.charCodeAt(i)
+          if (ch === 0x0d || ch === 0x0a) {
+            const line = cmdBufRef.current.trim()
+            cmdBufRef.current = ''
+            if (line) addCmdHistory(tab.server.id, line)
+          } else if (ch === 0x7f || ch === 0x08) {
+            cmdBufRef.current = cmdBufRef.current.slice(0, -1)
+          } else if (ch === 0x1b || ch === 0x03 || ch === 0x15) {
+            // ESC, Ctrl+C, Ctrl+U — drop buffer
+            cmdBufRef.current = ''
+            // Skip remainder of CSI/OSC sequence
+            if (ch === 0x1b) break
+          } else if (ch >= 0x20 && ch < 0x7f) {
+            cmdBufRef.current += data[i]
+          }
+        }
+        if (onInputRef.current) {
+          onInputRef.current(data)
+        } else if (sessionIdRef.current) {
+          nt?.sshSendInput(sessionIdRef.current, data)
+        }
       })
 
       term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
@@ -1399,6 +1037,12 @@ function TerminalPane({ tab, active, onReconnect, inSplit }: { tab: Tab; active:
           navigator.clipboard.readText().then(text => {
             if (text && sessionIdRef.current) nt?.sshSendInput(sessionIdRef.current, text)
           })
+          return false
+        }
+        // Ctrl+Shift+R — command history (local, cross-server fuzzy)
+        if (e.ctrlKey && e.shiftKey && (e.key === 'R' || e.key === 'r')) {
+          e.preventDefault()
+          onOpenHistoryRef.current?.(tab.server.id, tab.label || tab.server.name)
           return false
         }
         // Ctrl+F — search
@@ -1587,6 +1231,21 @@ function TerminalPane({ tab, active, onReconnect, inSplit }: { tab: Tab; active:
         </div>
       )}
 
+      {/* Breadcrumb toolbar — shown only when connected */}
+      {tab.status === 'connected' && (
+        <div className="term-toolbar">
+          <div className="term-breadcrumb">
+            <span className="bc-server">{tab.server.name}</span>
+            <span className="bc-sep">›</span>
+            <span className="bc-path">{tab.server.username}@{tab.server.host}</span>
+          </div>
+          <div className="conn-badge">
+            <span className="conn-pulse" />
+            Connected
+          </div>
+        </div>
+      )}
+
       {/* Terminal container — outer div provides the visual boundary;
           inner div is the actual xterm mount point with 8px inset on all sides.
           This prevents FitAddon from reading border-box padding as available height. */}
@@ -1655,10 +1314,12 @@ function sftpFileClass(name: string): string {
 
 // --- SFTP File Browser ---
 function SftpBrowser({
-  sessionId, onOpenFile,
+  sessionId, onOpenFile, onCreateNoteFromFile,
 }: {
   sessionId: string | null
   onOpenFile: (remotePath: string, sessionId: string) => void
+  /** Right-click → "Create note" — file path is absolute on the remote host. */
+  onCreateNoteFromFile?: (remotePath: string, fileName: string) => void
 }) {
   const { t } = useLanguage()
   const [path, setPath] = useState('/')
@@ -1668,6 +1329,7 @@ function SftpBrowser({
   const [editingPath, setEditingPath] = useState(false)
   const [pathInput, setPathInput] = useState('/')
   const [transferring, setTransferring] = useState<string | null>(null) // filename being transferred
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number; path: string; name: string } | null>(null)
 
   const loadDir = useCallback(async (dirPath: string) => {
     if (!sessionId) return
@@ -1775,6 +1437,21 @@ function SftpBrowser({
       {loading && <div className="sftp-status">{t('loading')}</div>}
       {transferring && <div className="sftp-status sftp-status-transfer">{transferring === '…' ? t('uploading') : `${t('downloading')}${transferring}…`}</div>}
       {error && <div className="sftp-status sftp-status-error" title={error}>⚠ {error}</div>}
+      {ctxMenu && (
+        <ContextMenu
+          open={true}
+          x={ctxMenu.x}
+          y={ctxMenu.y}
+          items={[
+            {
+              label: t('createNoteFromFile') || 'Create note',
+              icon: <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>,
+              onClick: () => onCreateNoteFromFile?.(ctxMenu.path, ctxMenu.name),
+            },
+          ]}
+          onClose={() => setCtxMenu(null)}
+        />
+      )}
       {!loading && !error && (
         <div className="sftp-list">
           {files.length === 0 && <div className="sftp-status">{t('emptyDirectory')}</div>}
@@ -1783,6 +1460,12 @@ function SftpBrowser({
               key={f.name}
               className={`sftp-item ${f.isDir ? 'is-dir' : `is-file ${sftpFileClass(f.name)}`}`}
               onClick={() => navigate(f.name, f.isDir, f.path)}
+              onContextMenu={e => {
+                if (f.isDir || !onCreateNoteFromFile) return
+                e.preventDefault()
+                e.stopPropagation()
+                setCtxMenu({ x: e.clientX, y: e.clientY, path: f.path, name: f.name })
+              }}
               title={f.name}
             >
               <span className="sftp-icon">{f.isDir ? '▸' : '·'}</span>
@@ -2060,21 +1743,179 @@ function GroupModal({ onSave, onClose }: { onSave: (name: string, color: string)
   )
 }
 
+// --- Port Forwarding Modal ---
+function ForwardingModal({ sessionId, onClose }: { sessionId: string; onClose: () => void }) {
+  const { t } = useLanguage()
+  const [forwards, setForwards] = useState<PortForward[]>([])
+  const [localPort, setLocalPort] = useState('8080')
+  const [remoteHost, setRemoteHost] = useState('localhost')
+  const [remotePort, setRemotePort] = useState('80')
+  const [adding, setAdding] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const reload = useCallback(async () => {
+    try {
+      const list = await nt?.sshForwardList(sessionId) ?? []
+      setForwards(list.map((f: { id: string; local_port: number; remote_host: string; remote_port: number }) => ({
+        id: f.id,
+        sessionId,
+        localPort: f.local_port,
+        remoteHost: f.remote_host,
+        remotePort: f.remote_port,
+      })))
+    } catch { /* ignore */ }
+  }, [sessionId])
+
+  useEffect(() => { reload() }, [reload])
+
+  const handleAdd = async () => {
+    setError(null)
+    const lp = parseInt(localPort)
+    const rp = parseInt(remotePort)
+    if (!localPort || !remoteHost || !remotePort || isNaN(lp) || isNaN(rp)) {
+      setError(t('forwardInvalidParams')); return
+    }
+    setAdding(true)
+    try {
+      await nt?.sshForwardAdd(sessionId, lp, remoteHost, rp)
+      await reload()
+      setLocalPort(''); setRemoteHost('localhost'); setRemotePort('')
+    } catch (e) {
+      setError(String(e))
+    } finally {
+      setAdding(false)
+    }
+  }
+
+  const handleRemove = async (id: string) => {
+    try {
+      await nt?.sshForwardRemove(id)
+      await reload()
+    } catch { /* ignore */ }
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box" onClick={e => e.stopPropagation()} style={{ width: 500 }}>
+        <div className="modal-header">
+          <span className="modal-title">{t('portForwarding')}</span>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div className="modal-body">
+          <div className="fwd-hint">{t('portForwardHint')}</div>
+
+          {/* Active forwards */}
+          {forwards.length > 0 && (
+            <div className="fwd-list">
+              {forwards.map(f => (
+                <div key={f.id} className="fwd-row">
+                  <div className="fwd-row-info">
+                    <span className="fwd-badge">LOCAL</span>
+                    <span className="fwd-addr">127.0.0.1:{f.localPort}</span>
+                    <span className="fwd-arrow">→</span>
+                    <span className="fwd-addr">{f.remoteHost}:{f.remotePort}</span>
+                  </div>
+                  <button className="fwd-remove-btn" onClick={() => handleRemove(f.id)} title={t('removeForward')}>✕</button>
+                </div>
+              ))}
+            </div>
+          )}
+          {forwards.length === 0 && (
+            <div className="fwd-empty">{t('noForwards')}</div>
+          )}
+
+          {/* Add forward form */}
+          <div className="fwd-form">
+            <div className="fwd-form-title">{t('addForward')}</div>
+            <div className="fwd-form-row">
+              <div className="fwd-field">
+                <label className="fwd-label">{t('localPort')}</label>
+                <input className="fwd-input" type="number" min="1" max="65535" placeholder="8080"
+                  value={localPort} onChange={e => setLocalPort(e.target.value)} />
+              </div>
+              <span className="fwd-form-arrow">→</span>
+              <div className="fwd-field" style={{ flex: 2 }}>
+                <label className="fwd-label">{t('remoteHost')}</label>
+                <input className="fwd-input" placeholder="localhost"
+                  value={remoteHost} onChange={e => setRemoteHost(e.target.value)} />
+              </div>
+              <div className="fwd-field">
+                <label className="fwd-label">{t('remotePort')}</label>
+                <input className="fwd-input" type="number" min="1" max="65535" placeholder="80"
+                  value={remotePort} onChange={e => setRemotePort(e.target.value)} />
+              </div>
+            </div>
+            {error && <div className="fwd-error">{error}</div>}
+            <div className="fwd-form-actions">
+              <button className="btn-primary" onClick={handleAdd} disabled={adding}>
+                {adding ? t('adding') : t('addForwardBtn')}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // --- Main App ---
 export default function App() {
   const [servers, setServers] = useState<Server[]>([])
   const [tabs, setTabs] = useState<Tab[]>([])
+  const updateTab = useCallback((id: string, patch: Partial<Tab> | ((t: Tab) => Partial<Tab>)) => {
+    setTabs(prev => prev.map(t => {
+      if (t.id !== id) return t
+      const p = typeof patch === 'function' ? patch(t) : patch
+      return { ...t, ...p }
+    }))
+  }, [])
   const [activeTab, setActiveTab] = useState<string | null>(null)
+  const tabBarRef = useRef<HTMLDivElement | null>(null)
   const [showAddServer, setShowAddServer] = useState(false)
+  const [showImportSSH, setShowImportSSH] = useState(false)
+  const [renamingTabId, setRenamingTabId] = useState<string | null>(null)
   const [editingServer, setEditingServer] = useState<Server | null>(null)
   const [quickConnectOpen, setQuickConnectOpen] = useState(false)
   const [quickConnectVal, setQuickConnectVal] = useState('')
   const [showNotes, setShowNotes] = useState(true)
+  /**
+   * Cross-component bridge for the SFTP "Create note" action. SftpBrowser sets
+   * this with the file's path + the current server's identity; NotesPanel
+   * picks it up via prop, materializes a draft note pre-bound to that
+   * file/server, opens the expand popup, and calls onConsumed to clear it.
+   */
+  const [pendingNoteFromFile, setPendingNoteFromFile] = useState<{
+    serverId: string
+    serverName: string
+    host: string
+    path: string
+    fileName: string
+  } | null>(null)
+  const [noteEditor, setNoteEditor] = useState<{
+    note: Note
+    save: (n: Note) => Promise<void>
+    del: (id: string) => void
+    folders: string[]
+  } | null>(null)
+  const [logViewerMinimized, setLogViewerMinimized] = useState(false)
   const [dragTabId, setDragTabId] = useState<string | null>(null)
-  const [editorFiles, setEditorFiles] = useState<EditorFile[]>([])
-  const [activeEditorPath, setActiveEditorPath] = useState<string | null>(null)
-  const [editorSaveError, setEditorSaveError] = useState('')
-  const [activePanel, setActivePanel] = useState<'servers' | 'sftp' | 'snippets'>('servers')
+  // ── Per-tab editor + preview state ──
+  const [tabEditorStates, setTabEditorStates] = useState<Map<string, TabEditorState>>(new Map())
+  const updateEditorState = useCallback((tabId: string, updater: Partial<TabEditorState> | ((prev: TabEditorState) => Partial<TabEditorState>)) => {
+    setTabEditorStates(prev => {
+      const next = new Map(prev)
+      const cur = next.get(tabId) ?? DEFAULT_EDITOR_STATE
+      const delta = typeof updater === 'function' ? updater(cur) : updater
+      next.set(tabId, { ...cur, ...delta })
+      return next
+    })
+  }, [])
+  // Derived — active tab's editor state (used by openFileInEditor callback)
+  const editorFiles = ((activeTab ? tabEditorStates.get(activeTab) : null) ?? DEFAULT_EDITOR_STATE).files
+  const [activePanel, setActivePanel] = useState<'servers' | 'sftp' | 'snippets' | 'logs' | 'settings' | 'chat'>('servers')
+  const [chatThread, setChatThread] = useState<ChatThreadState | null>(null)
+  const [hasUnreadChat, setHasUnreadChat] = useState(false)
+  const [settingsSection, setSettingsSection] = useState<SettingsSection>('themes')
   const [sideCollapsed, setSideCollapsed] = useState(true)   // hidden by default — use Ctrl+K or activity bar
   // ── Split pane ──
   const [splitLayout, setSplitLayout] = useState<SplitLayout>('1')
@@ -2087,18 +1928,29 @@ export default function App() {
   const termAreaRef = useRef<HTMLDivElement>(null)
   const [showShortcuts, setShowShortcuts] = useState(false)
   const [updateState, setUpdateState] = useState<UpdateState>({ status: 'idle' })
+  const [panicMode, setPanicMode] = useState(false)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void; onCancel: () => void } | null>(null)
-  const saveEditorFileRef = useRef<() => void>(() => {})
+  const [confirmDialog, setConfirmDialog] = useState<{ message: string; onConfirm: () => void; onCancel: () => void; danger?: boolean } | null>(null)
   // ── Tab groups ──
   const [groups, setGroups] = useState<TabGroup[]>([])
   const [filterGroupId, setFilterGroupId] = useState<string | null>(null)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   const [contextMenu, setContextMenu] = useState<{ tabId: string; x: number; y: number } | null>(null)
   const [showGroupModal, setShowGroupModal] = useState<{ tabId: string } | null>(null)
+  // ── Broadcast & port forwarding ──
+  const [broadcastMode, setBroadcastMode] = useState(false)
+  const [showForwarding, setShowForwarding] = useState(false)
+  const [showTunnels, setShowTunnels] = useState(false)
+  const [tunnelCount, setTunnelCount] = useState(0)
+  const [cmdHistFor, setCmdHistFor] = useState<{ serverId: string; serverName: string } | null>(null)
+  // ── Admin shell (elevated instance) ──
+  const [isAdminInstance, setIsAdminInstance] = useState(false)
   // ── Command palette ──
   const [showPalette, setShowPalette] = useState(false)
+  const [showAchievements, setShowAchievements] = useState(false)
+  // ── Snippet doc view (central area) ──
+  const [snipDoc, setSnipDoc] = useState<SnipDocState | null>(null)
   // ── Auto-reconnect ──
   const intentionalDisconnectRef = useRef<Set<string>>(new Set())
   const reconnectTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
@@ -2116,7 +1968,13 @@ export default function App() {
 
   // i18n
   const langState = useLangState()
-  const { t } = langState
+  const { t, lang } = langState
+  const themeState = useThemeState()
+  const achCtx = useAchievements()
+
+  // Last-session workspace (server IDs that were open last time)
+  const [lastSessionIds, setLastSessionIds] = useState<string[]>([])
+  const workspaceLoadedRef = useRef(false)
 
   // Load servers
   useEffect(() => {
@@ -2134,15 +1992,97 @@ export default function App() {
     })
   }, [])
 
+  // ── Workspace: load saved session IDs once on mount ─────────────────────────
+  useEffect(() => {
+    nt?.getWorkspace().then((ws: unknown) => {
+      const ids = (ws && typeof ws === 'object' && Array.isArray((ws as { serverIds?: unknown }).serverIds))
+        ? ((ws as { serverIds: unknown[] }).serverIds.filter((x): x is string => typeof x === 'string'))
+        : []
+      setLastSessionIds(ids)
+      workspaceLoadedRef.current = true
+    }).catch(() => { workspaceLoadedRef.current = true })
+  }, [])
+
+  // ── Workspace: persist current open tabs (server IDs, deduped) ──────────────
+  useEffect(() => {
+    if (!workspaceLoadedRef.current) return
+    const seen = new Set<string>()
+    const serverIds: string[] = []
+    for (const tb of tabs) {
+      const id = tb.server.id
+      if (!seen.has(id) && id && id !== '__admin__') {
+        seen.add(id); serverIds.push(id)
+      }
+    }
+    nt?.saveWorkspace({ serverIds, savedAt: Date.now() }).catch(() => {})
+  }, [tabs])
+
+  // ── Poll active tunnel count for toolbar badge ─────────────────────────────
+  useEffect(() => {
+    let cancelled = false
+    const tick = async () => {
+      const connected = tabs.filter(t => t.sessionId && t.status === 'connected' && (t.server.connType ?? 'ssh') === 'ssh')
+      if (connected.length === 0) { if (!cancelled) setTunnelCount(0); return }
+      let total = 0
+      for (const tb of connected) {
+        try {
+          const list = await nt?.sshForwardList(tb.sessionId!) ?? []
+          total += list.length
+        } catch { /* ignore */ }
+      }
+      if (!cancelled) setTunnelCount(total)
+    }
+    tick()
+    const id = setInterval(tick, 5000)
+    return () => { cancelled = true; clearInterval(id) }
+  }, [tabs])
+
+  // ── Admin shell auto-connect (elevated instance launched via --admin-shell) ──
+  const adminInitDone = useRef(false)
+  useEffect(() => {
+    if (adminInitDone.current) return   // guard against React StrictMode double-fire
+    nt?.getStartupAdminShell().then((shell: string | null) => {
+      if (!shell) return
+      if (adminInitDone.current) return
+      adminInitDone.current = true
+      setIsAdminInstance(true)
+      const adminServer: Server = {
+        id: '__admin__',
+        name: shell.replace(/\\/g, '/').split('/').pop() ?? shell,
+        connType: 'local',
+        localShell: shell,
+        asAdmin: false,
+        host: '', port: 0, username: '',
+      }
+      setTimeout(() => connectServer(adminServer), 150)
+    }).catch(() => {})
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Auto-update check on startup ──────────────────────────────────────────
+  useEffect(() => {
+    const check = async () => {
+      setUpdateState({ status: 'checking' })
+      const result = await nt?.checkForUpdates()
+      if (result?.hasUpdate && result.version) {
+        setUpdateState({ status: 'available', version: result.version })
+      } else {
+        setUpdateState({ status: 'idle' })
+      }
+    }
+    // Delay 3s so the app has time to fully load first
+    const timer = setTimeout(check, 3000)
+    return () => clearTimeout(timer)
+  }, [])
+
   // Groups are session-only — tabs don't persist so groups without tabs make no sense
   const persistGroups = useCallback((next: TabGroup[]) => {
     setGroups(next)
   }, [])
 
   const assignTabToGroup = useCallback((tabId: string, groupId: string | null) => {
-    setTabs(prev => prev.map(t => t.id === tabId ? { ...t, groupId: groupId ?? undefined } : t))
+    updateTab(tabId, { groupId: groupId ?? undefined })
     setContextMenu(null)
-  }, [])
+  }, [updateTab])
 
   const createGroup = useCallback((name: string, color: string, tabId: string) => {
     const newGroup: TabGroup = { id: Date.now().toString(), name, color }
@@ -2151,16 +2091,10 @@ export default function App() {
     setShowGroupModal(null)
   }, [groups, persistGroups, assignTabToGroup])
 
-  const _deleteGroup = useCallback((groupId: string) => {
-    persistGroups(groups.filter(g => g.id !== groupId))
-    setTabs(prev => prev.map(t => t.groupId === groupId ? { ...t, groupId: undefined } : t))
-    if (filterGroupId === groupId) setFilterGroupId(null)
-  }, [groups, persistGroups, filterGroupId])
-  void _deleteGroup // available for future use
-
   // F1 → shortcuts modal | Ctrl+K → command palette
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'h') { e.preventDefault(); setPanicMode(v => !v); return }
       if (e.key === 'F1') { e.preventDefault(); setShowShortcuts(v => !v) }
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); setShowPalette(v => !v) }
       if ((e.ctrlKey || e.metaKey) && e.key === 'l') { e.preventDefault(); setQuickConnectOpen(true) }
@@ -2181,6 +2115,11 @@ export default function App() {
         const wasIntentional = intentionalDisconnectRef.current.has(sessionId)
         if (wasIntentional) {
           intentionalDisconnectRef.current.delete(sessionId)
+          return prev.map(t => t.sessionId === sessionId ? { ...t, status: 'disconnected' as const } : t)
+        }
+
+        // Non-SSH types (local/docker/serial/telnet) don't auto-reconnect
+        if (tab.server.connType && tab.server.connType !== 'ssh') {
           return prev.map(t => t.sessionId === sessionId ? { ...t, status: 'disconnected' as const } : t)
         }
 
@@ -2245,7 +2184,6 @@ export default function App() {
   }, [])
 
   const activeTabData = tabs.find(t => t.id === activeTab) || null
-  const editorFile = editorFiles.find(f => f.remotePath === activeEditorPath) || null
 
   const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current)
@@ -2253,35 +2191,16 @@ export default function App() {
     toastTimerRef.current = setTimeout(() => setToast(null), 3000)
   }, [])
 
-  const showConfirm = useCallback((message: string): Promise<boolean> => {
+  const showConfirm = useCallback((message: string, danger = false): Promise<boolean> => {
     return new Promise(resolve => {
       setConfirmDialog({
         message,
+        danger,
         onConfirm: () => { setConfirmDialog(null); resolve(true) },
         onCancel:  () => { setConfirmDialog(null); resolve(false) },
       })
     })
   }, [])
-
-  // Keep save ref fresh so Monaco Ctrl+S always saves current file
-  useEffect(() => {
-    saveEditorFileRef.current = async () => {
-      if (!editorFile) return
-      setEditorSaveError('')
-      try {
-        // sftpWriteFile returns void — throws on error
-        await nt?.sftpWriteFile(editorFile.sessionId, editorFile.remotePath, editorFile.content)
-        setEditorFiles(prev => prev.map(f =>
-          f.remotePath === editorFile.remotePath ? { ...f, modified: false } : f
-        ))
-        showToast(`Saved: ${editorFile.remotePath.split('/').pop()}`)
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : String(e)
-        setEditorSaveError(msg)
-        showToast(msg, 'error')
-      }
-    }
-  }, [editorFile, showToast])
 
   // ── Split layout change ──
   const changeSplitLayout = useCallback((newLayout: SplitLayout, currentTabs: Tab[], currentActiveTab: string | null, currentSlots: (string | null)[]) => {
@@ -2291,6 +2210,7 @@ export default function App() {
     setSplitRowRatio(50)
     setActivePaneIdx(0)
     setShowLayoutPicker(false)
+    if (newLayout !== '1') achCtx?.trackEvent({ type: 'split-layout', layout: newLayout })
 
     // Slots: keep existing assignments, fill NEW empty slots with unassigned tabs.
     // If no content yet → distribute all open tabs into slots (active tab first).
@@ -2359,7 +2279,11 @@ export default function App() {
       fitAddon: null,
     }
 
-    setTabs(prev => [...prev, newTab])
+    setTabs(prev => {
+      const next = [...prev, newTab]
+      achCtx?.trackEvent({ type: 'tabs-changed', count: next.length })
+      return next
+    })
     setActiveTab(tabId)
     // In split mode: prefer first empty slot; fall back to active pane
     if (splitLayout !== '1') {
@@ -2384,34 +2308,75 @@ export default function App() {
     }, 5000)
 
     try {
-      // Vault fallback: if secrets not in memory, load from system keychain
-      let connectPassword = server.password
-      let connectPassphrase = server.passphrase
-      if (!server.useAgent && !server.privateKeyPath && !connectPassword) {
-        connectPassword = (await nt?.vaultLoad(server.id, 'password').catch(() => null)) ?? undefined
-      }
-      if (server.privateKeyPath && !connectPassphrase) {
-        connectPassphrase = (await nt?.vaultLoad(server.id, 'passphrase').catch(() => null)) ?? undefined
-      }
+      const ct = server.connType ?? 'ssh'
+      let result: { sessionId: string }
 
-      const result = await nt?.sshConnect({
-        host: server.host,
-        port: server.port,
-        username: server.username,
-        password: connectPassword,
-        privateKeyPath: server.privateKeyPath,
-        passphrase: connectPassphrase,
-        useAgent: server.useAgent,
-        jumpHost: server.jumpHost,
-      })
+      if (ct === 'ssh') {
+        // Vault fallback: if secrets not in memory, load from system keychain
+        let connectPassword = server.password
+        let connectPassphrase = server.passphrase
+        if (!server.useAgent && !server.privateKeyPath && !connectPassword) {
+          connectPassword = (await nt?.vaultLoad(server.id, 'password').catch(() => null)) ?? undefined
+        }
+        if (server.privateKeyPath && !connectPassphrase) {
+          connectPassphrase = (await nt?.vaultLoad(server.id, 'passphrase').catch(() => null)) ?? undefined
+        }
+        result = await nt!.sshConnect({
+          host: server.host,
+          port: server.port,
+          username: server.username,
+          password: connectPassword,
+          privateKeyPath: server.privateKeyPath,
+          passphrase: connectPassphrase,
+          useAgent: server.useAgent,
+          forwardAgent: server.forwardAgent,
+          jumpHost: server.jumpHost,
+        })
+      } else if (ct === 'telnet') {
+        result = await nt!.telnetConnect(server.host, server.port)
+      } else if (ct === 'serial') {
+        result = await nt!.serialConnect(server.serialPort ?? 'COM1', server.baudRate ?? 9600)
+      } else if (ct === 'local') {
+        if (server.asAdmin) {
+          // Launch new elevated SENU window — current window stays open
+          clearTimeout(hintTimer)
+          setTabs(prev => prev.filter(t => t.id !== tabId))
+          await nt!.localConnectAdmin(server.localShell ?? undefined)
+          return
+        }
+        result = await nt!.localConnect(server.localShell ?? undefined, undefined)
+      } else if (ct === 'docker') {
+        result = await nt!.dockerConnect(server.dockerContainer ?? '', server.dockerShell ?? 'sh')
+      } else {
+        throw new Error(`Unknown connection type: ${ct}`)
+      }
 
       clearTimeout(hintTimer)
-      setTabs(prev => prev.map(t =>
-        t.id === tabId ? { ...t, sessionId: result.sessionId, status: 'connected', connectedAt: Date.now() } : t
-      ))
+      setTabs(prev => prev.map(t => {
+        if (t.id !== tabId) return t
+        // Sync PTY size with actual terminal immediately after connect.
+        // PTY starts at 80×24; if the real terminal is wider PowerShell
+        // wraps at col 80 with bare \r, causing text to overwrite itself.
+        if (t.terminal && t.fitAddon) {
+          // Use a small timeout so xterm has finished rendering first
+          setTimeout(() => {
+            if (t.terminal && t.fitAddon) {
+              try { t.fitAddon.fit() } catch { /* ignore */ }
+              nt?.sshResize(result.sessionId, t.terminal.cols, t.terminal.rows)
+            }
+          }, 50)
+        }
+        // Admin instance: print a visible banner so user knows they're elevated
+        if (t.server.id === '__admin__' && t.terminal) {
+          t.terminal.write('\x1b[0m\r\n\x1b[41;97m  \u26a1 Administrator  \x1b[0m  \x1b[2mType "exit" to close\x1b[0m\r\n\r\n')
+        }
+        achCtx?.trackEvent({ type: 'connection', connType: server.connType ?? 'ssh', usedJump: !!server.jumpHost, usedAgent: !!server.useAgent })
+        markServerConnected(server.id)
+        return { ...t, sessionId: result.sessionId, status: 'connected', connectedAt: Date.now() }
+      }))
     } catch (err) {
       clearTimeout(hintTimer)
-      const errMsg = typeof err === 'string' ? err : ((err as any)?.message || 'Connection failed')
+      const errMsg = getErrorMessage(err, 'Connection failed')
       setTabs(prev => prev.map(t => {
         if (t.id === tabId) {
           // Пишемо помилку прямо в термінал
@@ -2445,8 +2410,9 @@ export default function App() {
     })
     setShowAddServer(false)
     setEditingServer(null)
+    achCtx?.trackEvent({ type: 'server-add' })
     if (connect) connectServer(server)
-  }, [connectServer])
+  }, [connectServer, achCtx])
 
   const deleteServer = useCallback(async (serverId: string) => {
     // Remove secrets from system keychain first
@@ -2489,41 +2455,31 @@ export default function App() {
     }
     setQuickConnectOpen(false)
     setQuickConnectVal('')
+    achCtx?.trackEvent({ type: 'quick-connect' })
     connectServer(server)
-  }, [connectServer])
+  }, [connectServer, achCtx])
 
   const openFileInEditor = useCallback(async (remotePath: string, sessionId: string) => {
-    // Already open? Just switch to it
+    if (!activeTab) return
+    // Already open in this tab? Just activate it
     if (editorFiles.some(f => f.remotePath === remotePath)) {
-      setActiveEditorPath(remotePath)
+      updateEditorState(activeTab, { activePath: remotePath, minimized: false })
       return
     }
     try {
-      // sftpReadFile returns string directly
       const content = await nt?.sftpReadFile(sessionId, remotePath) ?? ''
-      setEditorFiles(prev => [...prev, { remotePath, content, sessionId, modified: false }])
-      setActiveEditorPath(remotePath)
-      setEditorSaveError('')
+      achCtx?.trackEvent({ type: 'editor-open' })
+      updateEditorState(activeTab, prev => ({
+        files: [...prev.files, { remotePath, content, sessionId, modified: false }],
+        activePath: remotePath,
+        saveError: '',
+        minimized: false,
+      }))
     } catch (e: unknown) {
       showToast(`Cannot open: ${e instanceof Error ? e.message : String(e)}`, 'error')
     }
-  }, [editorFiles, showToast])
+  }, [activeTab, editorFiles, updateEditorState, showToast])
 
-  const closeEditorFile = useCallback(async (remotePath: string) => {
-    const file = editorFiles.find(f => f.remotePath === remotePath)
-    if (file?.modified) {
-      const ok = await showConfirm('Unsaved changes will be lost. Close anyway?')
-      if (!ok) return
-    }
-    setEditorFiles(prev => {
-      const next = prev.filter(f => f.remotePath !== remotePath)
-      if (activeEditorPath === remotePath) {
-        setActiveEditorPath(next[next.length - 1]?.remotePath || null)
-      }
-      setEditorSaveError('')
-      return next
-    })
-  }, [editorFiles, activeEditorPath, showConfirm])
 
   const closeTab = useCallback(async (tabId: string) => {
     const tab = tabs.find(t => t.id === tabId)
@@ -2543,16 +2499,44 @@ export default function App() {
     setTabs(prev => {
       const next = prev.filter(t => t.id !== tabId)
       if (activeTab === tabId) setActiveTab(next[next.length - 1]?.id || null)
+      // Admin instance: close the whole window when last tab is gone
+      if (isAdminInstance && next.length === 0) {
+        setTimeout(() => nt?.windowClose(), 100)
+      }
       return next
     })
-  }, [tabs, activeTab])
+    setTabEditorStates(prev => {
+      const next = new Map(prev)
+      next.delete(tabId)
+      return next
+    })
+  }, [tabs, activeTab, isAdminInstance])
+
+  const disconnectAll = useCallback(async () => {
+    const connected = tabs.filter(t => t.status === 'connected' && t.sessionId)
+    if (!connected.length) return
+    const ok = await showConfirm(
+      connected.length === 1
+        ? `Disconnect "${connected[0].server.name}"?`
+        : `Disconnect all ${connected.length} active sessions?`,
+      true
+    )
+    if (!ok) return
+    await Promise.all(connected.map(t => {
+      intentionalDisconnectRef.current.add(t.sessionId!)
+      return nt?.sshDisconnect(t.sessionId!).catch(() => {})
+    }))
+    setTabs(prev => prev.map(t =>
+      t.status === 'connected' ? { ...t, status: 'disconnected' as const, sessionId: null } : t
+    ))
+  }, [tabs, showConfirm])
 
   const reconnectTab = useCallback(async (tabId: string) => {
     const tab = tabs.find(t => t.id === tabId)
     if (!tab) return
 
     tab.terminal?.write('\r\n\x1b[33m↻ Reconnecting to ' + tab.server.host + '...\x1b[0m\r\n')
-    setTabs(prev => prev.map(t => t.id === tabId ? { ...t, status: 'connecting' as const, sessionId: null } : t))
+    updateTab(tabId, { status: 'connecting', sessionId: null })
 
     const hintTimer = setTimeout(() => {
       setTabs(prev => prev.map(t => {
@@ -2582,17 +2566,27 @@ export default function App() {
         privateKeyPath: tab.server.privateKeyPath,
         passphrase: reconnPassphrase,
         useAgent: tab.server.useAgent,
+        forwardAgent: tab.server.forwardAgent,
         jumpHost: tab.server.jumpHost,
       })
       clearTimeout(hintTimer)
       // Успіх — скидаємо лічильник авторекону
       reconnectAttemptsRef.current.delete(tabId)
-      setTabs(prev => prev.map(t =>
-        t.id === tabId ? { ...t, sessionId: result.sessionId, status: 'connected', connectedAt: Date.now() } : t
-      ))
+      setTabs(prev => prev.map(t => {
+        if (t.id !== tabId) return t
+        if (t.terminal && t.fitAddon) {
+          setTimeout(() => {
+            if (t.terminal && t.fitAddon) {
+              try { t.fitAddon.fit() } catch { /* ignore */ }
+              nt?.sshResize(result.sessionId, t.terminal.cols, t.terminal.rows)
+            }
+          }, 50)
+        }
+        return { ...t, sessionId: result.sessionId, status: 'connected', connectedAt: Date.now() }
+      }))
     } catch (err) {
       clearTimeout(hintTimer)
-      const errMsg = typeof err === 'string' ? err : ((err as any)?.message || 'Connection failed')
+      const errMsg = getErrorMessage(err, 'Connection failed')
       const attempt = reconnectAttemptsRef.current.get(tabId) ?? 0
       const maxAttempts = 5
       setTabs(prev => prev.map(t => {
@@ -2652,66 +2646,67 @@ export default function App() {
   const insertSnippet = useCallback((cmd: string) => {
     const tab = tabs.find(t => t.id === activeTab)
     if (tab?.sessionId) nt?.sshSendInput(tab.sessionId, cmd)
-  }, [tabs, activeTab])
+    achCtx?.trackEvent({ type: 'snippet-run' })
+  }, [tabs, activeTab, achCtx])
 
   const runSnippet = useCallback((cmd: string) => {
     const tab = tabs.find(t => t.id === activeTab)
     if (tab?.sessionId) nt?.sshSendInput(tab.sessionId, cmd + '\n')
-  }, [tabs, activeTab])
+    achCtx?.trackEvent({ type: 'snippet-run' })
+  }, [tabs, activeTab, achCtx])
+
+  // When the active tab changes (or new tab is opened), make sure it's
+  // visible in the (now horizontally-scrollable) tab bar. inline:'nearest'
+  // avoids unnecessary scrolling if the tab is already on screen.
+  useEffect(() => {
+    if (!activeTab || !tabBarRef.current) return
+    const el = tabBarRef.current.querySelector(`[data-tab-id="${activeTab}"]`)
+    if (el && 'scrollIntoView' in el) {
+      ;(el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' })
+    }
+  }, [activeTab, tabs.length])
 
   return (
+    <ThemeContext.Provider value={themeState}>
     <LangContext.Provider value={langState}>
+    <AchievementsProvider lang={langState.lang}>
       <div className="app">
-      {/* Title bar */}
-      <div className="titlebar" data-tauri-drag-region>
-        <div className="titlebar-drag" data-tauri-drag-region />
-        <span className="titlebar-title" data-tauri-drag-region>SENU</span>
-        <div className="titlebar-drag" data-tauri-drag-region />
-        <button className="titlebar-help" onClick={() => setShowShortcuts(true)} title={t('keyboardShortcuts')}>?</button>
-        <div className="window-controls">
-          <button className="wc-btn wc-minimize" onClick={() => nt?.windowMinimize()} title={t('minimize')}>
-            <svg width="10" height="1" viewBox="0 0 10 1"><rect width="10" height="1" fill="currentColor"/></svg>
-          </button>
-          <button className="wc-btn wc-maximize" onClick={() => nt?.windowMaximize()} title={t('maximize')}>
-            <svg width="10" height="10" viewBox="0 0 10 10"><rect x="0.5" y="0.5" width="9" height="9" rx="1" fill="none" stroke="currentColor" strokeWidth="1"/></svg>
-          </button>
-          <button className="wc-btn wc-close" onClick={() => nt?.windowClose()} title={t('close')}>
-            <svg width="10" height="10" viewBox="0 0 10 10"><line x1="0" y1="0" x2="10" y2="10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/><line x1="10" y1="0" x2="0" y2="10" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
-          </button>
+      {panicMode && <PanicOverlay onExit={() => setPanicMode(false)} />}
+      {/* Title bar — merged with tab bar */}
+      <div className="titlebar">
+        {/* macOS window controls */}
+        <div className="wc-wrap">
+          <div className="wc wc-close" onClick={() => nt?.windowClose()} title={t('close')} />
+          <div className="wc wc-min" onClick={() => nt?.windowMinimize()} title={t('minimize')} />
+          <div className="wc wc-max" onClick={() => nt?.windowMaximize()} title={t('maximize')} />
         </div>
-      </div>
+        {/* SENU Logo — draggable handle */}
+        <div className="tb-logo" data-tauri-drag-region>
+          <span data-tauri-drag-region>SENU{isAdminInstance && <span style={{ fontSize: 9, marginLeft: 2 }} title="Running as Administrator">🛡</span>}</span>
+        </div>
 
-      {/* Update bar */}
-      <UpdateBar
-        state={updateState}
-        onDownload={() => nt?.downloadUpdate()}
-        onInstall={() => nt?.installUpdate()}
-        onDismiss={() => setUpdateState({ status: 'idle' })}
-      />
-
-      {/* Tab bar */}
-      <div className="tabbar">
-        <div className="tabs">
+        {/* Tab bar — inside titlebar.
+            ref + effect (just below render) auto-scrolls the active tab into
+            view when many tabs overflow horizontally. */}
+        <div className="tab-bar" ref={tabBarRef}>
           {(filterGroupId ? tabs.filter(t => t.groupId === filterGroupId) : tabs)
             .filter(t => !t.groupId || !collapsedGroups.has(t.groupId))
             .map(tab => {
             const grp = tab.groupId ? groups.find(g => g.id === tab.groupId) : null
-            // In split mode: show which pane this tab is in (1-indexed)
             const paneIdx = splitLayout !== '1' ? paneSlots.indexOf(tab.id) : -1
             const isFocusedPane = paneIdx !== -1 && paneIdx === activePaneIdx
             return (
               <div
                 key={tab.id}
+                data-tab-id={tab.id}
                 className={`tab ${activeTab === tab.id ? 'active' : ''} status-${tab.status} ${dragTabId === tab.id ? 'tab-dragging' : ''} ${isFocusedPane ? 'tab-pane-focused' : ''}`}
                 style={grp ? { '--tab-group-color': grp.color } as React.CSSProperties : undefined}
                 onClick={() => {
                   setActiveTab(tab.id)
                   if (splitLayout !== '1') {
                     if (paneIdx !== -1) {
-                      // Tab already shown in a pane → just focus that pane
                       setActivePaneIdx(paneIdx)
                     } else {
-                      // Tab not in any pane → put it in the currently active pane
                       setPaneSlots(prev => {
                         const next = [...prev]
                         next[activePaneIdx] = tab.id
@@ -2719,6 +2714,11 @@ export default function App() {
                       })
                     }
                   }
+                  // Move keyboard focus into the terminal of the clicked tab.
+                  // Without this, after clicking a tab while the chat / notes
+                  // sidebar had focus, keystrokes still went to the sidebar
+                  // instead of the shell.
+                  setTimeout(() => { try { tab.terminal?.focus() } catch {} }, 0)
                 }}
                 onContextMenu={e => { e.preventDefault(); setContextMenu({ tabId: tab.id, x: e.clientX, y: e.clientY }) }}
                 draggable
@@ -2730,26 +2730,61 @@ export default function App() {
                 {tab.status === 'connecting' ? (
                   <span className="tab-spinner" />
                 ) : (
-                  <span className="tab-dot" style={{ background: tab.server.color || '#00d4aa' }} />
+                  <span className="tab-dot" style={{ background: tab.server.color || 'var(--accent)' }} />
                 )}
-                <span className="tab-name">{tab.server.name}</span>
-                {/* Pane number badge in split mode */}
+                {renamingTabId === tab.id ? (
+                  <input
+                    className="tab-rename-input"
+                    defaultValue={tab.label ?? tab.server.name}
+                    autoFocus
+                    onClick={e => e.stopPropagation()}
+                    onBlur={e => {
+                      const val = e.target.value.trim()
+                      updateTab(tab.id, { label: val || undefined })
+                      setRenamingTabId(null)
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+                      if (e.key === 'Escape') { setRenamingTabId(null) }
+                    }}
+                  />
+                ) : (
+                  <span
+                    className="tab-name"
+                    onDoubleClick={e => { e.stopPropagation(); setRenamingTabId(tab.id) }}
+                    title="Double-click to rename"
+                  >{tab.label ?? tab.server.name}</span>
+                )}
                 {paneIdx !== -1 && (
                   <span className="tab-pane-badge" title={`Pane ${paneIdx + 1}`}>{paneIdx + 1}</span>
                 )}
                 {(tab.status === 'error' || tab.status === 'disconnected') && (
                   <button className="tab-reconnect" title={t('reconnect')} onClick={e => { e.stopPropagation(); reconnectTab(tab.id) }}>↻</button>
                 )}
+                <TabUptime connectedAt={tab.connectedAt} status={tab.status} />
                 <button className="tab-close" onClick={e => { e.stopPropagation(); closeTab(tab.id) }}>✕</button>
               </div>
             )
           })}
+          {/* New connection button inside tab bar */}
+          {!isAdminInstance && <button className="tab-add" onClick={() => setShowAddServer(true)} title={t('newConnection')}>+</button>}
+
+          {/* Minimized log viewer tab — shown on the right when log is minimized */}
+          {logViewerMinimized && (
+            <div className="tab tab-log-minimized" onClick={() => setLogViewerMinimized(false)} title={t('logViewer')}>
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                <path d="M4 19V5"/><path d="M8 19v-6"/><path d="M12 19V9"/><path d="M16 19v-3"/><path d="M20 19V7"/>
+              </svg>
+              <span className="tab-name" style={{ color: 'var(--accent)' }}>{t('logViewer')}</span>
+              <button className="tab-close" onClick={e => { e.stopPropagation(); setLogViewerMinimized(false) }}>▲</button>
+            </div>
+          )}
         </div>
 
-        <div className="tabbar-actions">
-          <button className="tabbar-btn" onClick={() => setShowAddServer(true)} title={t('newConnection')}>{Ico.plus(13)}</button>
+        {/* Right actions — inside titlebar */}
+        <div className="tb-right">
           {/* Quick Connect */}
-          {quickConnectOpen ? (
+          {!isAdminInstance && (quickConnectOpen ? (
             <input
               className="quick-connect-input"
               autoFocus
@@ -2763,26 +2798,26 @@ export default function App() {
               onBlur={() => { if (!quickConnectVal) setQuickConnectOpen(false) }}
             />
           ) : (
-            <button className="tabbar-btn" onClick={() => setQuickConnectOpen(true)} title={t('quickConnectTitle')}>
-              ⚡
+            <button className="tb-btn" onClick={() => setQuickConnectOpen(true)} title={t('quickConnectTitle')}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="13 2 4 14 12 14 11 22 20 10 12 10 13 2"/>
+              </svg>
             </button>
-          )}
-          <button
-            className="tabbar-btn"
+          ))}
+          {/* Command Palette */}
+          {!isAdminInstance && <button
+            className="tb-btn"
             onClick={() => setShowPalette(v => !v)}
             title={t('commandPaletteTitle')}
-            style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text3)', padding: '4px 7px', letterSpacing: '0.05em' }}
-          >⌘K</button>
+            style={{ fontSize: 10, fontFamily: 'var(--mono)', letterSpacing: '0.05em' }}
+          >⌘K</button>}
 
           {/* Group filter buttons */}
-          {groups.length > 0 && (
+          {!isAdminInstance && groups.length > 0 && (
             <div className="group-filters">
               {filterGroupId && (
-                <button
-                  className="tabbar-btn group-filter-clear"
-                  title={t('showAllTabs')}
-                  onClick={() => setFilterGroupId(null)}
-                >
+                <button className="tb-btn group-filter-clear" title={t('showAllTabs')} onClick={() => setFilterGroupId(null)}>
                   {Ico.filter(12)} All
                 </button>
               )}
@@ -2792,7 +2827,7 @@ export default function App() {
                 return (
                   <span key={g.id} className="group-filter-wrap">
                     <button
-                      className={`tabbar-btn group-filter-btn ${filterGroupId === g.id ? 'active' : ''}`}
+                      className={`tb-btn group-filter-btn ${filterGroupId === g.id ? 'active' : ''}`}
                       title={`Filter: ${g.name} (${tabCount} tabs)`}
                       onClick={() => setFilterGroupId(prev => prev === g.id ? null : g.id)}
                     >
@@ -2801,7 +2836,7 @@ export default function App() {
                       {tabCount > 0 && <span className="group-filter-count">{tabCount}</span>}
                     </button>
                     <button
-                      className={`tabbar-btn group-collapse-btn ${isCollapsed ? 'active' : ''}`}
+                      className={`tb-btn group-collapse-btn ${isCollapsed ? 'active' : ''}`}
                       title={isCollapsed ? `Expand group "${g.name}"` : `Collapse group "${g.name}"`}
                       onClick={() => setCollapsedGroups(prev => {
                         const next = new Set(prev)
@@ -2819,9 +2854,9 @@ export default function App() {
           )}
 
           {/* Layout picker */}
-          <div className="layout-picker-wrap" style={{ position: 'relative' }}>
+          {!isAdminInstance && <div className="layout-picker-wrap" style={{ position: 'relative' }}>
             <button
-              className={`tabbar-btn layout-btn ${splitLayout !== '1' ? 'active' : ''}`}
+              className={`tb-btn layout-btn ${splitLayout !== '1' ? 'active' : ''}`}
               title={t('splitLayout')}
               onClick={() => setShowLayoutPicker(v => !v)}
             >
@@ -2845,12 +2880,64 @@ export default function App() {
                 ))}
               </div>
             )}
-          </div>
+          </div>}
 
-          {/* Lock/unlock splitter — only shown in split mode */}
+          {/* Disconnect all — panic button */}
+          {!isAdminInstance && tabs.some(t => t.status === 'connected') && (
+            <button
+              className="tb-panic-btn"
+              title={lang === 'uk' ? 'Відключити всі сесії' : lang === 'de' ? 'Alle Sitzungen trennen' : 'Disconnect all sessions'}
+              onClick={disconnectAll}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+              <span>{tabs.filter(t => t.status === 'connected').length}</span>
+            </button>
+          )}
+
+          {/* Broadcast toggle */}
+          {!isAdminInstance && tabs.filter(t => t.status === 'connected').length > 1 && (
+            <button
+              className={`tb-btn broadcast-btn ${broadcastMode ? 'active broadcast-btn--on' : ''}`}
+              title={broadcastMode ? t('broadcastOff') : t('broadcastOn')}
+              onClick={() => { setBroadcastMode(v => { if (!v) achCtx?.trackEvent({ type: 'broadcast' }); return !v }) }}
+            >
+              {Ico.broadcast(13)}
+            </button>
+          )}
+
+          {/* Port forwarding — toggles tunnels popover; keeps ForwardingModal for add */}
+          {!isAdminInstance && tabs.some(t => t.status === 'connected' && (t.server.connType ?? 'ssh') === 'ssh') && (
+            <div style={{ position: 'relative' }}>
+              <button
+                className={`tb-btn ${showTunnels || showForwarding ? 'active' : ''}`}
+                title={t('portForwarding')}
+                onClick={() => setShowTunnels(v => !v)}
+              >
+                {Ico.tunnel(13)}
+                {tunnelCount > 0 && <span className="tb-badge">{tunnelCount}</span>}
+              </button>
+              {showTunnels && (
+                <TunnelsPopover
+                  tabs={tabs}
+                  onClose={() => setShowTunnels(false)}
+                  onAddNew={() => {
+                    setShowTunnels(false)
+                    if (activeTab && tabs.find(t => t.id === activeTab)?.status === 'connected') {
+                      achCtx?.trackEvent({ type: 'port-forward' })
+                      setShowForwarding(true)
+                    }
+                  }}
+                />
+              )}
+            </div>
+          )}
+
+          {/* Lock/unlock splitter */}
           {splitLayout !== '1' && (
             <button
-              className={`tabbar-btn ${splitLocked ? 'active' : ''}`}
+              className={`tb-btn ${splitLocked ? 'active' : ''}`}
               title={splitLocked ? t('unlockSplitter') : t('lockSplitter')}
               onClick={() => setSplitLocked(v => !v)}
             >
@@ -2858,31 +2945,71 @@ export default function App() {
             </button>
           )}
 
-          <button className={`tabbar-btn ${showNotes ? 'active' : ''}`} onClick={() => setShowNotes(v => !v)} title={t('toggleNotes')}>{Ico.notes(13)}</button>
+          {/* Notes toggle */}
+          {!isAdminInstance && <button className={`tb-btn ${showNotes ? 'active' : ''}`} onClick={() => setShowNotes(v => !v)} title={t('toggleNotes')}>{Ico.notes(13)}</button>}
+
+          {/* Keyboard shortcuts help */}
+          {!isAdminInstance && <button className="tb-btn" onClick={() => setShowShortcuts(true)} title={t('keyboardShortcuts')} style={{ fontSize: 11, fontWeight: 600 }}>?</button>}
         </div>
-      </div>
+      </div>{/* end .titlebar */}
+
+      {/* Update bar */}
+      <UpdateBar
+        state={updateState}
+        onDownload={async () => {
+          const version = updateState.status === 'available' ? updateState.version : '?'
+          setUpdateState({ status: 'downloading', percent: 0 })
+          try {
+            await nt?.downloadUpdate((percent: number) => {
+              setUpdateState({ status: 'downloading', percent })
+            })
+            setUpdateState({ status: 'downloaded', version })
+          } catch (e: unknown) {
+            setUpdateState({ status: 'error', message: (e as Error)?.message ?? 'Download failed' })
+          }
+        }}
+        onInstall={() => nt?.installUpdate()}
+        onDismiss={() => setUpdateState({ status: 'idle' })}
+      />
 
       {/* Main area */}
       <div className="main">
-        {/* Activity bar */}
-        <div className="activity-bar">
-          {(['servers', 'sftp', 'snippets'] as const).map((panel) => {
+        {/* Activity bar — hidden in admin mode */}
+        <div className="activity-bar" style={isAdminInstance ? { display: 'none' } : undefined}>
+          {(['servers', 'sftp', 'snippets', 'logs', 'chat'] as const).map((panel) => {
             const isActive = activePanel === panel && !sideCollapsed
+            const refitAllTerminals = () => {
+              setTimeout(() => {
+                tabs.forEach(t => { if (t.fitAddon) { try { t.fitAddon.fit() } catch(_){} } })
+              }, 320)
+            }
             const handleClick = () => {
               if (sideCollapsed) {
                 setActivePanel(panel)
                 setSideCollapsed(false)
+                refitAllTerminals()
+                if (panel === 'sftp') achCtx?.trackEvent({ type: 'sftp-open' })
+                if (panel === 'logs') achCtx?.trackEvent({ type: 'log-viewer-open' })
               } else if (activePanel === panel) {
                 setSideCollapsed(true)  // same icon → collapse
+                refitAllTerminals()
               } else {
                 setActivePanel(panel)   // different icon → switch
+                if (panel === 'sftp') achCtx?.trackEvent({ type: 'sftp-open' })
+                if (panel === 'logs') achCtx?.trackEvent({ type: 'log-viewer-open' })
               }
             }
             return (
               <button
                 key={panel}
-                className={`activity-btn ${isActive ? 'active' : ''}`}
-                title={panel === 'servers' ? t('servers') : panel === 'sftp' ? t('sftpBrowser') : t('commandSnippets')}
+                className={`ab-icon ${isActive ? 'on' : ''}`}
+                title={
+                  panel === 'servers' ? t('servers')
+                  : panel === 'sftp' ? t('sftpBrowser')
+                  : panel === 'snippets' ? t('commandSnippets')
+                  : panel === 'chat' ? (lang === 'uk' ? 'Зашифрований чат' : 'Encrypted Chat')
+                  : t('logViewer')
+                }
                 onClick={handleClick}
               >
                 {panel === 'servers' && (
@@ -2901,13 +3028,65 @@ export default function App() {
                     <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
                   </svg>
                 )}
+                {panel === 'logs' && (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 19V5"/><path d="M8 19v-6"/><path d="M12 19V9"/><path d="M16 19v-3"/><path d="M20 19V7"/>
+                  </svg>
+                )}
+                {panel === 'chat' && (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                  </svg>
+                )}
               </button>
             )
           })}
+          <div className="activity-spacer" />
+          {/* Achievements button */}
+          <button
+            className={`ab-icon${achCtx && achCtx.totalUnlocked > 0 ? ' has-badge' : ''}`}
+            title="Achievements"
+            onClick={() => setShowAchievements(true)}
+            style={{ position: 'relative' }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="8" r="6"/><path d="M15.477 12.89L17 22l-5-3-5 3 1.523-9.11"/>
+            </svg>
+            {achCtx && achCtx.totalUnlocked > 0 && (
+              <span className="ach-activity-badge" />
+            )}
+          </button>
+          {(() => {
+            const panel = 'settings' as const
+            const isActive = activePanel === panel && !sideCollapsed
+            const handleClick = () => {
+              if (sideCollapsed) {
+                setActivePanel(panel)
+                setSideCollapsed(false)
+              } else if (activePanel === panel) {
+                setSideCollapsed(true)
+              } else {
+                setActivePanel(panel)
+              }
+            }
+            return (
+              <button
+                className={`ab-icon ${isActive ? 'on' : ''}`}
+                title={t('settings')}
+                onClick={handleClick}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="3" />
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.01A1.65 1.65 0 0 0 10 3.09V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.01a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.01a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                </svg>
+              </button>
+            )
+          })()}
         </div>
 
         {/* Side panel — collapses to zero width when sideCollapsed */}
-        <div className={`side-panel${sideCollapsed ? ' side-panel--collapsed' : ''}`}>
+        <div className={`side-panel${(sideCollapsed || isAdminInstance) ? ' side-panel--collapsed' : ''}`}>
+        <div className="side-panel-inner">
           {activePanel === 'servers' && (
             <>
               <div className="panel-title">{t('servers')}</div>
@@ -2916,8 +3095,20 @@ export default function App() {
                   <span className="server-dot" style={{ background: server.color || '#00d4aa' }} />
                   <div className="server-info">
                     <span className="server-name">{server.name}</span>
-                    <span className="server-host">{server.username}@{server.host}</span>
+                    <span className="server-host">
+                      {(!server.connType || server.connType === 'ssh') && `${server.username}@${server.host}`}
+                      {server.connType === 'telnet' && `telnet://${server.host}:${server.port}`}
+                      {server.connType === 'serial' && `${server.serialPort ?? '?'} @ ${server.baudRate ?? 9600}`}
+                      {server.connType === 'local' && (server.localShell ?? 'local shell')}
+                      {server.connType === 'docker' && `docker: ${server.dockerContainer ?? '?'}`}
+                    </span>
                   </div>
+                  {server.connType === 'local' && server.asAdmin && (
+                    <span className="server-type-badge server-type-badge--admin" title={t('runAsAdmin')}>🛡</span>
+                  )}
+                  {server.connType && server.connType !== 'ssh' && (
+                    <span className="server-type-badge">{server.connType.toUpperCase()}</span>
+                  )}
                   <div className="server-actions">
                     <button className="server-action-btn" title={t('edit')}
                       onClick={e => { e.stopPropagation(); setEditingServer(server) }}>{Ico.pencil(13)}</button>
@@ -2929,7 +3120,15 @@ export default function App() {
               {servers.length === 0 && (
                 <div className="sidebar-empty">{t('noServers').split('\n').map((line, i) => <span key={i}>{line}{i === 0 ? <br /> : ''}</span>)}</div>
               )}
-              <button className="sidebar-add" onClick={() => setShowAddServer(true)}>{t('addServer')}</button>
+              <div className="sidebar-add-row">
+                <button className="sidebar-add" onClick={() => setShowAddServer(true)}>{t('addServer')}</button>
+                <button className="sidebar-import-btn" onClick={() => setShowImportSSH(true)} title={t('importSshConfig')}>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+                  </svg>
+                  {t('importAction')}
+                </button>
+              </div>
             </>
           )}
           {/* Always mounted — CSS hides it to preserve path state */}
@@ -2937,51 +3136,333 @@ export default function App() {
             <SftpBrowser
               sessionId={activeTabData?.sessionId || null}
               onOpenFile={openFileInEditor}
+              onCreateNoteFromFile={(path, fileName) => {
+                const srv = activeTabData?.server
+                if (!srv) return
+                setPendingNoteFromFile({
+                  serverId: srv.id,
+                  serverName: srv.name,
+                  host: srv.host,
+                  path,
+                  fileName,
+                })
+                setShowNotes(true)
+              }}
             />
           </div>
           {/* Snippets — always mounted to preserve search/tab state */}
           <div style={{ display: activePanel === 'snippets' ? 'contents' : 'none' }}>
-            <SnippetsPanel onInsert={insertSnippet} onRun={runSnippet} />
+            <SnippetsPanel onInsert={insertSnippet} onRun={runSnippet} onOpenDoc={setSnipDoc} />
           </div>
+          <div style={{ display: activePanel === 'logs' ? 'contents' : 'none' }}>
+            <LogViewerPanel
+              sessionId={activeTabData?.sessionId || null}
+              serverName={activeTabData?.server.name || null}
+              isMinimized={logViewerMinimized}
+              onMinimizedChange={setLogViewerMinimized}
+            />
+          </div>
+          <div style={{ display: activePanel === 'chat' ? 'contents' : 'none' }}>
+            <ChatPanel
+              sessionId={activeTabData?.sessionId || null}
+              visible={activePanel === 'chat' && !sideCollapsed}
+              onOpenThread={setChatThread}
+              lang={lang}
+              onConfirm={showConfirm}
+              onUnreadChange={setHasUnreadChat}
+            />
+          </div>
+          <div style={{ display: activePanel === 'settings' ? 'contents' : 'none' }}>
+            <div className="ph">
+              <div className="ph-title">{t('settings')}</div>
+            </div>
+            <div className="panel-scroll settings-nav">
+              <button className={`settings-nav-item ${settingsSection === 'themes' ? 'active' : ''}`} onClick={() => setSettingsSection('themes')}>{t('themes')}</button>
+              <button className={`settings-nav-item ${settingsSection === 'language' ? 'active' : ''}`} onClick={() => setSettingsSection('language')}>{t('interfaceLanguage')}</button>
+              <div className="settings-nav-sep" />
+              <button className={`settings-nav-item settings-nav-docs ${settingsSection === 'docs' ? 'active' : ''}`} onClick={() => setSettingsSection('docs')}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                  <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                </svg>
+                {lang === 'uk' ? 'Документація' : 'Documentation'}
+              </button>
+            </div>
+          </div>
+        </div>{/* end side-panel-inner */}
         </div>
 
         {/* Terminal area */}
         <div className="terminal-area" ref={termAreaRef} style={{ position: 'relative' }}>
+          {activePanel === 'settings' && !sideCollapsed && !isAdminInstance && (
+            <div className="settings-stage">
+              {settingsSection === 'docs'
+                ? <DocsPage lang={lang} onClose={() => setSettingsSection('themes')} />
+                : <SettingsView section={settingsSection} />
+              }
+            </div>
+          )}
+          {/* Snippet doc overlay — visible only while Snippets sidebar is active.
+              Switching the sidebar away keeps doc state alive and re-shows it
+              on return, like a background tab. */}
+          {snipDoc && activePanel === 'snippets' && (
+            <SnipDocView
+              doc={snipDoc}
+              onClose={() => setSnipDoc(null)}
+              onInsert={insertSnippet}
+              onRun={runSnippet}
+            />
+          )}
+          {/* Note editor overlay — tied to the right-side Notes panel toggle */}
+          {noteEditor && showNotes && (
+            <NoteEditor
+              key={noteEditor.note.id}
+              note={noteEditor.note}
+              servers={servers.map(s => ({ id: s.id, name: s.name, host: s.host }))}
+              existingFolders={noteEditor.folders}
+              lang={lang}
+              onSave={async (n) => { await noteEditor.save(n); setNoteEditor(null) }}
+              onDelete={async (id) => { noteEditor.del(id); setNoteEditor(null) }}
+              onClose={() => setNoteEditor(null)}
+              connectedServers={tabs
+                .filter(t => t.status === 'connected' && t.sessionId)
+                .map(t => ({ id: t.server.id, name: t.server.name }))
+                // Dedupe — same server may have multiple connected tabs.
+                .filter((s, i, arr) => arr.findIndex(x => x.id === s.id) === i)}
+              onConfirm={showConfirm}
+              onSaveLocal={async (filename, content) => {
+                // Native "Save As" dialog for the note's markdown.
+                await window.nextterm.saveMarkdown(filename, content)
+              }}
+              onCreateFolder={async (name) => {
+                if (!name.trim()) return null
+                const id = `f_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`
+                const folder = {
+                  id, name: name.trim(),
+                  parentFolderId: undefined as string | undefined,
+                  createdAt: new Date().toISOString(),
+                }
+                try {
+                  await window.nextterm.saveFolder?.(folder)
+                  foldersStore.upsert(folder)
+                  return { id: folder.id, name: folder.name }
+                } catch (e) {
+                  console.error('saveFolder failed:', e)
+                  return null
+                }
+              }}
+              onPushToServer={async (serverId, remotePath, content) => {
+                // Find an active session for the requested server. The first
+                // connected tab wins; others are duplicates pointing at the
+                // same server.
+                const tab = tabs.find(t => t.server.id === serverId && t.status === 'connected' && t.sessionId)
+                if (!tab?.sessionId) return { ok: false, error: 'No active session for this server' }
+                try {
+                  await window.nextterm.sftpWriteFile(tab.sessionId, remotePath, content)
+                  return { ok: true }
+                } catch (e) {
+                  return { ok: false, error: String((e as Error)?.message ?? e) }
+                }
+              }}
+            />
+          )}
+          {/* Chat thread overlay */}
+          {chatThread && (
+            <ChatThreadView
+              state={chatThread}
+              sessionId={activeTabData?.sessionId || null}
+              onClose={() => setChatThread(null)}
+            />
+          )}
+          {/* Center Mode Bar — Terminal | Editor | Docs */}
+          {!isAdminInstance && activePanel !== 'settings' && tabs.length > 0 && (() => {
+            const tab = activeTabData
+            const pes = tab ? (tabEditorStates.get(tab.id) ?? null) : null
+            const hasEditor = pes && pes.files.length > 0
+            const editorMode = hasEditor && pes && !pes.minimized ? 'editor' : 'terminal'
+            return (
+              <div className="cmb">
+                <button
+                  className={`cmb-btn m-terminal ${editorMode === 'terminal' ? 'on' : ''}`}
+                  onClick={() => {
+                    if (tab && hasEditor) updateEditorState(tab.id, { minimized: true })
+                  }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
+                  </svg>
+                  {t('terminalMode')}
+                </button>
+                <button
+                  className={`cmb-btn m-editor ${editorMode === 'editor' ? 'on' : ''}`}
+                  onClick={() => {
+                    if (tab && hasEditor) updateEditorState(tab.id, { minimized: false })
+                  }}
+                  style={{ opacity: hasEditor ? 1 : 0.35 }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                  </svg>
+                  {t('editorMode')}
+                </button>
+                <div className="cmb-sep" />
+                {tab && (
+                  <span style={{ fontSize: 11, color: 'var(--text3)', fontFamily: 'var(--mono)' }}>
+                    {tab.server.name}
+                  </span>
+                )}
+              </div>
+            )
+          })()}
+          {/* Broadcast active banner */}
+          {broadcastMode && tabs.filter(t => t.status === 'connected').length > 1 && (
+            <div className="broadcast-banner">
+              {Ico.broadcast(12)}
+              <span>{t('broadcastActive')} ({tabs.filter(t => t.status === 'connected').length} {t('sessions')})</span>
+              <button className="broadcast-banner-close" onClick={() => setBroadcastMode(false)}>✕</button>
+            </div>
+          )}
           {/* Single mode — classic layout */}
           {splitLayout === '1' && (
             <>
               {tabs.length === 0 && (
-                <div className="empty-state">
-                  <div className="empty-hero">
-                    <div className="empty-logo">{Ico.crystal()}</div>
-                    <div className="empty-title">SENU</div>
-                    <div className="empty-sub">{t('appTagline')}</div>
-                  </div>
-                  {servers.length > 0 && (
-                    <div className="empty-servers-section">
-                      <div className="empty-section-label">{t('quickConnect')}</div>
-                      <div className="empty-server-grid">
-                        {servers.slice(0, 6).map(s => (
-                          <div key={s.id} className="empty-server-card" onClick={() => connectServer(s)}>
-                            <span className="empty-server-dot" style={{ background: s.color || '#00d4aa' }} />
-                            <div className="empty-server-info">
-                              <div className="empty-server-name">{s.name}</div>
-                              <div className="empty-server-host">{s.username}@{s.host}</div>
-                            </div>
-                            <span className="empty-server-arrow">→</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  <button className="btn-primary" onClick={() => setShowAddServer(true)}>
-                    {t('newConnectionBtn')}
-                  </button>
-                </div>
+                <HomeScreen
+                  servers={servers}
+                  groups={groups}
+                  lang={lang}
+                  t={t}
+                  onConnect={connectServer}
+                  onAddServer={() => setShowAddServer(true)}
+                  restorableIds={lastSessionIds.filter(id => servers.some(s => s.id === id))}
+                  onRestoreSession={() => {
+                    const toOpen = lastSessionIds
+                      .map(id => servers.find(s => s.id === id))
+                      .filter((s): s is Server => !!s)
+                    toOpen.forEach((s, i) => setTimeout(() => connectServer(s), i * 120))
+                  }}
+                />
               )}
               {tabs.map(tab => (
-                <TerminalPane key={tab.id} tab={tab} active={tab.id === activeTab} onReconnect={() => reconnectTab(tab.id)} />
+                <TerminalPane
+                  key={tab.id}
+                  tab={tab}
+                  active={tab.id === activeTab}
+                  onReconnect={() => reconnectTab(tab.id)}
+                  onOpenHistory={(sid, sname) => setCmdHistFor({ serverId: sid, serverName: sname })}
+                  onInput={tab.id === activeTab ? (data) => {
+                    if (tab.sessionId) nt?.sshSendInput(tab.sessionId, data)
+                    if (broadcastMode) {
+                      tabs.filter(t => t.id !== tab.id && t.status === 'connected' && t.sessionId)
+                        .forEach(t => nt?.sshSendInput(t.sessionId!, data))
+                    }
+                  } : undefined}
+                />
               ))}
+              {/* Single-layout editor overlays — one per tab, only active is visible */}
+              {tabs.map(tab => {
+                const tid = tab.id
+                const pes = tabEditorStates.get(tid) ?? DEFAULT_EDITOR_STATE
+                if (pes.files.length === 0) return null
+                const pActivePath = pes.activePath
+                const pFiles = pes.files
+                const pFile = pFiles.find(f => f.remotePath === pActivePath) ?? null
+                const isVisible = tid === activeTab
+
+                const savePane = async () => {
+                  if (!pFile) return
+                  updateEditorState(tid, { saveError: '' })
+                  try {
+                    await nt?.sftpWriteFile(pFile.sessionId, pFile.remotePath, pFile.content)
+                    updateEditorState(tid, prev => ({
+                      files: prev.files.map(f => f.remotePath === pFile.remotePath ? { ...f, modified: false } : f),
+                    }))
+                    showToast(`Saved: ${pFile.remotePath.split('/').pop()}`)
+                  } catch (e: unknown) {
+                    const msg = e instanceof Error ? e.message : String(e)
+                    updateEditorState(tid, { saveError: msg })
+                    showToast(msg, 'error')
+                  }
+                }
+
+                const closePaneFile = async (remotePath: string) => {
+                  const f = pFiles.find(x => x.remotePath === remotePath)
+                  if (f?.modified) {
+                    const ok = await showConfirm('Unsaved changes will be lost. Close anyway?')
+                    if (!ok) return
+                  }
+                  updateEditorState(tid, prev => {
+                    const next = prev.files.filter(x => x.remotePath !== remotePath)
+                    return {
+                      files: next,
+                      activePath: prev.activePath === remotePath ? (next[next.length - 1]?.remotePath ?? null) : prev.activePath,
+                      saveError: '',
+                    }
+                  })
+                }
+
+                return (
+                  <div
+                    key={`ed-single-${tid}`}
+                    className={`editor-overlay${pes.minimized ? ' editor-overlay--minimized' : ''}`}
+                    style={{ display: isVisible ? 'flex' : 'none' }}
+                  >
+                    <div className="editor-tabs-bar">
+                      <div className="editor-tabs-list">
+                        {pFiles.map(f => {
+                          const name = f.remotePath.split('/').pop() || f.remotePath
+                          const isActive = f.remotePath === pActivePath
+                          return (
+                            <div key={f.remotePath} className={`editor-tab ${isActive ? 'active' : ''}`}
+                              title={f.remotePath}
+                              onClick={() => updateEditorState(tid, { activePath: f.remotePath })}>
+                              {f.modified && <span className="editor-tab-dot">●</span>}
+                              <span className="editor-tab-name">{name}</span>
+                              <button className="editor-tab-close"
+                                onClick={e => { e.stopPropagation(); closePaneFile(f.remotePath) }}>✕</button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                      <div className="editor-tabs-actions">
+                        {pes.saveError && !pes.minimized && (
+                          <span className="editor-save-error" title={pes.saveError}>⚠ {pes.saveError}</span>
+                        )}
+                        <button className="editor-minimize-btn"
+                          title={pes.minimized ? 'Restore editor' : 'Minimize editor'}
+                          onClick={() => updateEditorState(tid, prev => ({ minimized: !prev.minimized }))}>
+                          {pes.minimized ? '▲' : '▼'}
+                        </button>
+                        {!pes.minimized && (
+                          <>
+                            <button className="btn-primary btn-sm" onClick={savePane}>
+                              Save <span style={{ opacity: 0.5, fontSize: 10 }}>Ctrl+S</span>
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    {!pes.minimized && (<>
+                      <div className="editor-body">
+                        {pFile && (
+                          <div className="editor-monaco-pane">
+                            <SftpEditor
+                              key={pActivePath}
+                              remotePath={pFile.remotePath}
+                              value={pFile.content}
+                              modified={!!pFile.modified}
+                              onChange={(val: string) => updateEditorState(tid, prev => ({
+                                files: prev.files.map(f =>
+                                  f.remotePath === prev.activePath ? { ...f, content: val, modified: true } : f
+                                ),
+                              }))}
+                              onSave={() => savePane()}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </>)}
+                  </div>
+                )
+              })}
             </>
           )}
 
@@ -2997,6 +3478,46 @@ export default function App() {
                   const paneGroup = tab?.groupId ? groups.find(g => g.id === tab.groupId) : null
                   const r = rects[slotIdx]
                   const isFocused = slotIdx === activePaneIdx
+
+                  // ── Per-pane editor state ──
+                  const pes        = (tabId ? tabEditorStates.get(tabId) : null) ?? DEFAULT_EDITOR_STATE
+                  const pFiles     = pes.files
+                  const pActivePath = pes.activePath
+                  const pFile      = pFiles.find(f => f.remotePath === pActivePath) ?? null
+
+                  const savePane = async () => {
+                    if (!pFile || !tabId) return
+                    updateEditorState(tabId, { saveError: '' })
+                    try {
+                      await nt?.sftpWriteFile(pFile.sessionId, pFile.remotePath, pFile.content)
+                      updateEditorState(tabId, prev => ({
+                        files: prev.files.map(f => f.remotePath === pFile.remotePath ? { ...f, modified: false } : f),
+                      }))
+                      showToast(`Saved: ${pFile.remotePath.split('/').pop()}`)
+                    } catch (e: unknown) {
+                      const msg = e instanceof Error ? e.message : String(e)
+                      updateEditorState(tabId, { saveError: msg })
+                      showToast(msg, 'error')
+                    }
+                  }
+
+                  const closePaneFile = async (remotePath: string) => {
+                    if (!tabId) return
+                    const f = pFiles.find(x => x.remotePath === remotePath)
+                    if (f?.modified) {
+                      const ok = await showConfirm('Unsaved changes will be lost. Close anyway?')
+                      if (!ok) return
+                    }
+                    updateEditorState(tabId, prev => {
+                      const next = prev.files.filter(x => x.remotePath !== remotePath)
+                      return {
+                        files: next,
+                        activePath: prev.activePath === remotePath ? (next[next.length - 1]?.remotePath ?? null) : prev.activePath,
+                        saveError: '',
+                      }
+                    })
+                  }
+
                   return (
                     <div
                       key={slotIdx}
@@ -3008,12 +3529,99 @@ export default function App() {
                         <div className="pane-group-bar" style={{ background: paneGroup.color }} title={`Group: ${paneGroup.name}`} />
                       )}
                       {tab ? (
-                        <TerminalPane key={tab.id} tab={tab} active={isFocused} onReconnect={() => reconnectTab(tab.id)} inSplit />
+                        <TerminalPane
+                          key={tab.id}
+                          tab={tab}
+                          active={isFocused}
+                          onReconnect={() => reconnectTab(tab.id)}
+                          onOpenHistory={(sid, sname) => setCmdHistFor({ serverId: sid, serverName: sname })}
+                          inSplit
+                          onInput={isFocused ? (data) => {
+                            if (tab.sessionId) nt?.sshSendInput(tab.sessionId, data)
+                            if (broadcastMode) {
+                              tabs.filter(t => t.id !== tab.id && t.status === 'connected' && t.sessionId)
+                                .forEach(t => nt?.sshSendInput(t.sessionId!, data))
+                            }
+                          } : undefined}
+                        />
                       ) : (
                         <div className="pane-empty">
                           <div className="pane-empty-label">{`${t('pane')} ${slotIdx + 1}`}</div>
                           <div className="pane-empty-hint">{t('clickToConnect')}</div>
                           <button className="pane-empty-btn" onClick={e => { e.stopPropagation(); setActivePaneIdx(slotIdx); setShowAddServer(true) }}>{t('connectBtn')}</button>
+                        </div>
+                      )}
+
+                      {/* ── Per-pane Monaco editor overlay ── */}
+                      {tabId && pFiles.length > 0 && (
+                        <div
+                          className={`editor-overlay${pes.minimized ? ' editor-overlay--minimized' : ''}`}
+                          onClick={e => e.stopPropagation()}
+                        >
+                          {/* Tab bar */}
+                          <div className="editor-tabs-bar">
+                            <div className="editor-tabs-list">
+                              {pFiles.map(f => {
+                                const name = f.remotePath.split('/').pop() || f.remotePath
+                                const isActive = f.remotePath === pActivePath
+                                return (
+                                  <div
+                                    key={f.remotePath}
+                                    className={`editor-tab ${isActive ? 'active' : ''}`}
+                                    title={f.remotePath}
+                                    onClick={e => { e.stopPropagation(); updateEditorState(tabId, { activePath: f.remotePath }) }}
+                                  >
+                                    {f.modified && <span className="editor-tab-dot">●</span>}
+                                    <span className="editor-tab-name">{name}</span>
+                                    <button
+                                      className="editor-tab-close"
+                                      onClick={e => { e.stopPropagation(); closePaneFile(f.remotePath) }}
+                                    >✕</button>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                            <div className="editor-tabs-actions">
+                              {pes.saveError && !pes.minimized && (
+                                <span className="editor-save-error" title={pes.saveError}>⚠ {pes.saveError}</span>
+                              )}
+                              <button
+                                className="editor-minimize-btn"
+                                title={pes.minimized ? 'Restore editor' : 'Minimize editor'}
+                                onClick={e => { e.stopPropagation(); updateEditorState(tabId, prev => ({ minimized: !prev.minimized })) }}
+                              >
+                                {pes.minimized ? '▲' : '▼'}
+                              </button>
+                              {!pes.minimized && (
+                                <>
+                                  <button className="btn-primary btn-sm" onClick={e => { e.stopPropagation(); savePane() }}>
+                                    Save <span style={{ opacity: 0.5, fontSize: 10 }}>Ctrl+S</span>
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+
+                          {!pes.minimized && (<>
+                            <div className="editor-body">
+                              {pFile && (
+                                <div className="editor-monaco-pane">
+                                  <SftpEditor
+                                    key={pActivePath}
+                                    remotePath={pFile.remotePath}
+                                    value={pFile.content}
+                                    modified={!!pFile.modified}
+                                    onChange={(val: string) => updateEditorState(tabId, prev => ({
+                                      files: prev.files.map(f =>
+                                        f.remotePath === prev.activePath ? { ...f, content: val, modified: true } : f
+                                      ),
+                                    }))}
+                                    onSave={() => savePane()}
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          </>)}
                         </div>
                       )}
                     </div>
@@ -3042,88 +3650,90 @@ export default function App() {
             )
           })()}
 
-          {/* Monaco editor overlay — multi-tab */}
-
-          {editorFiles.length > 0 && (
-            <div className="editor-overlay">
-              {/* Tab bar */}
-              <div className="editor-tabs-bar">
-                <div className="editor-tabs-list">
-                  {editorFiles.map(f => {
-                    const name = f.remotePath.split('/').pop() || f.remotePath
-                    const isActive = f.remotePath === activeEditorPath
-                    return (
-                      <div
-                        key={f.remotePath}
-                        className={`editor-tab ${isActive ? 'active' : ''}`}
-                        title={f.remotePath}
-                        onClick={() => setActiveEditorPath(f.remotePath)}
-                      >
-                        {f.modified && <span className="editor-tab-dot">●</span>}
-                        <span className="editor-tab-name">{name}</span>
-                        <button
-                          className="editor-tab-close"
-                          onClick={e => { e.stopPropagation(); closeEditorFile(f.remotePath) }}
-                        >✕</button>
-                      </div>
-                    )
-                  })}
-                </div>
-                <div className="editor-tabs-actions">
-                  {editorSaveError && (
-                    <span className="editor-save-error" title={editorSaveError}>⚠ {editorSaveError}</span>
-                  )}
-                  <button className="btn-primary btn-sm" onClick={() => saveEditorFileRef.current()}>
-                    Save <span style={{ opacity: 0.5, fontSize: 10 }}>Ctrl+S</span>
-                  </button>
-                </div>
-              </div>
-              {/* Active file path */}
-              {editorFile && (
-                <div className="editor-path-bar">
-                  <span className="editor-path">{editorFile.remotePath}</span>
-                </div>
-              )}
-              {/* Monaco */}
-              {editorFile && (
-                <Editor
-                  key={activeEditorPath}
-                  height="calc(100% - 72px)"
-                  language={detectLanguage(editorFile.remotePath)}
-                  value={editorFile.content}
-                  theme="vs-dark"
-                  onChange={(val) => setEditorFiles(prev => prev.map(f =>
-                    f.remotePath === activeEditorPath ? { ...f, content: val || '', modified: true } : f
-                  ))}
-                  options={{ fontSize: 14, fontFamily: '"JetBrains Mono", monospace', minimap: { enabled: false } }}
-                  onMount={(editor, monaco) => {
-                    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => saveEditorFileRef.current())
-                  }}
-                />
-              )}
-            </div>
-          )}
 
         </div>
 
-        {/* Notes panel */}
-        <NotesPanel serverId={activeTabData?.server.id || null} visible={showNotes} />
+        {/* Notes panel — hidden in admin mode */}
+        {!isAdminInstance && (
+          <NotesPanel
+            serverId={null}
+            visible={showNotes}
+            activeServerName={activeTabData?.label ?? activeTabData?.server.name ?? null}
+            activeServerHost={activeTabData?.server.host ?? null}
+            activeServerConnected={activeTabData?.status === 'connected'}
+            servers={servers.map(s => ({ id: s.id, name: s.name, host: s.host }))}
+            onConfirm={showConfirm}
+            onOpenEditor={(note, save, del, folders) => { setNoteEditor({ note, save, del, folders }) }}
+            fullscreenNoteId={noteEditor?.note.id ?? null}
+            pendingNoteFromFile={pendingNoteFromFile}
+            onPendingNoteConsumed={() => setPendingNoteFromFile(null)}
+          />
+        )}
       </div>
 
       {/* Status bar — direct child of .app flex column */}
-      <StatusBar tab={activeTabData} />
+      <StatusBar
+        tab={activeTabData}
+        onPanic={() => { setPanicMode(true); achCtx?.trackEvent({ type: 'boss-key' }) }}
+        hasUnreadChat={hasUnreadChat}
+        chatPanelOpen={chatThread !== null || (activePanel === 'chat' && !sideCollapsed)}
+        onOpenChat={() => {
+          // Toggle: if any chat surface is visible (the side panel OR the
+          // thread overlay), hide ALL of it — collapse the side panel and
+          // close the thread overlay. The terminal underneath becomes
+          // fully visible. Re-press to bring chat back.
+          const chatVisible = chatThread !== null || (activePanel === 'chat' && !sideCollapsed)
+          if (chatVisible) {
+            setChatThread(null)
+            if (activePanel === 'chat') setSideCollapsed(true)
+          } else {
+            setActivePanel('chat')
+            setSideCollapsed(false)
+          }
+        }}
+      />
 
+      {showForwarding && activeTab && (() => {
+        const tab = tabs.find(t => t.id === activeTab)
+        return tab?.sessionId && tab.status === 'connected' ? (
+          <ForwardingModal
+            sessionId={tab.sessionId}
+            onClose={() => setShowForwarding(false)}
+          />
+        ) : null
+      })()}
       {showAddServer && (
         <ServerModal onSave={saveServer} onClose={() => setShowAddServer(false)} />
       )}
       {editingServer && (
         <ServerModal existing={editingServer} onSave={saveServer} onClose={() => setEditingServer(null)} />
       )}
+      {showImportSSH && (
+        <ImportSSHModal
+          onClose={() => setShowImportSSH(false)}
+          onImport={async (entries) => {
+            achCtx?.trackEvent({ type: 'ssh-import' })
+            for (const e of entries) {
+              const server = {
+                id: crypto.randomUUID(),
+                name: e.name,
+                host: e.host,
+                port: e.port,
+                username: e.username,
+                privateKeyPath: e.key_path ?? undefined,
+                color: '#00d4aa',
+              }
+              await saveServer(server, false)
+            }
+          }}
+        />
+      )}
       {confirmDialog && (
         <ConfirmModal
           message={confirmDialog.message}
           onConfirm={confirmDialog.onConfirm}
           onCancel={confirmDialog.onCancel}
+          danger={confirmDialog.danger}
         />
       )}
       {toast && <Toast message={toast.message} type={toast.type} />}
@@ -3136,6 +3746,7 @@ export default function App() {
           keyType={hostKeyPrompt.keyType}
           reason={hostKeyPrompt.reason}
           onAccept={(remember) => {
+            achCtx?.trackEvent({ type: 'host-key-verify' })
             nt?.sshVerifyHostKey({
               sessionId: hostKeyPrompt.sessionId,
               accepted: true,
@@ -3144,6 +3755,7 @@ export default function App() {
             setHostKeyPrompt(null)
           }}
           onReject={() => {
+            achCtx?.trackEvent({ type: 'host-key-reject' })
             nt?.sshVerifyHostKey({
               sessionId: hostKeyPrompt.sessionId,
               accepted: false,
@@ -3151,6 +3763,19 @@ export default function App() {
             }).catch(console.error)
             setHostKeyPrompt(null)
           }}
+        />
+      )}
+
+      {/* Command history (Ctrl+Shift+R) */}
+      {cmdHistFor && (
+        <CommandHistoryOverlay
+          serverId={cmdHistFor.serverId}
+          serverName={cmdHistFor.serverName}
+          onPick={(cmd) => {
+            const tab = tabs.find(tb => tb.id === activeTab)
+            if (tab?.sessionId) nt?.sshSendInput(tab.sessionId, cmd)
+          }}
+          onClose={() => setCmdHistFor(null)}
         />
       )}
 
@@ -3165,7 +3790,12 @@ export default function App() {
           onConnect={connectServer}
           onChangeSplitLayout={(l) => changeSplitLayout(l, tabs, activeTab, paneSlots)}
           onToggleNotes={() => setShowNotes(v => !v)}
-          onToggleSide={() => setSideCollapsed(v => !v)}
+          onToggleSide={() => {
+            setSideCollapsed(v => !v)
+            setTimeout(() => {
+              tabs.forEach(t => { if (t.fitAddon) { try { t.fitAddon.fit() } catch(_){} } })
+            }, 320)
+          }}
         />
       )}
 
@@ -3208,7 +3838,14 @@ export default function App() {
           onClose={() => setShowGroupModal(null)}
         />
       )}
+
+      {/* Achievements panel */}
+      {showAchievements && (
+        <AchievementsPanel lang={langState.lang} onClose={() => setShowAchievements(false)} />
+      )}
       </div>
+    </AchievementsProvider>
     </LangContext.Provider>
+    </ThemeContext.Provider>
   )
 }

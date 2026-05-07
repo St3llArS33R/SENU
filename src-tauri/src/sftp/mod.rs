@@ -1,3 +1,19 @@
+// Copyright 2026 Borys Zaitsev
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
+
 use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use tauri::AppHandle;
@@ -33,7 +49,7 @@ pub struct SftpReadResult {
 /// Open a new SFTP subsystem on the existing SSH session.
 /// Clones the Arc (cheap) to release the sessions lock before any network I/O,
 /// then locks the Handle only long enough to open a new channel.
-async fn open_sftp(
+pub(crate) async fn open_sftp(
     session_id: &str,
     sessions: &tauri::State<'_, SessionStore>,
 ) -> Result<SftpSession, SenuError> {
@@ -43,12 +59,14 @@ async fn open_sftp(
         let h = lock
             .get(session_id)
             .ok_or_else(|| SenuError::Sftp(format!("Session not found: {session_id}")))?;
-        Arc::clone(&h.ssh_handle)
+        h.ssh_handle.as_ref()
+            .ok_or_else(|| SenuError::Sftp("SFTP not available for this connection type".into()))
+            .map(Arc::clone)?
     };
 
     // 2. Lock Handle only for channel_open_session, then release
     let channel: russh::Channel<client::Msg> = {
-        let mut handle = handle_arc.lock().await;
+        let handle = handle_arc.lock().await;
         handle
             .channel_open_session()
             .await
@@ -79,10 +97,14 @@ pub async fn sftp_list_dir(
 ) -> Result<Vec<FileEntry>, SenuError> {
     let sftp = open_sftp(&session_id, &sessions).await?;
 
-    let read_dir = sftp
+    let read_dir_result = sftp
         .read_dir(&path)
         .await
-        .map_err(|e| SenuError::Sftp(format!("read_dir \"{path}\": {e}")))?;
+        .map_err(|e| SenuError::Sftp(format!("read_dir \"{path}\": {e}")));
+    // Close the SFTP channel before propagating any error — leaked channels
+    // accumulate on the server side and eventually trigger MaxSessions.
+    let _ = sftp.close().await;
+    let read_dir = read_dir_result?;
 
     let mut entries: Vec<FileEntry> = read_dir
         .into_iter()
@@ -132,16 +154,20 @@ pub async fn sftp_read_file(
 ) -> Result<SftpReadResult, SenuError> {
     let sftp = open_sftp(&session_id, &sessions).await?;
 
-    let mut file = sftp
-        .open(&path)
-        .await
-        .map_err(|e| SenuError::Sftp(format!("open \"{path}\": {e}")))?;
-
-    let mut content = Vec::new();
-    file.read_to_end(&mut content)
-        .await
-        .map_err(|e| SenuError::Sftp(format!("read \"{path}\": {e}")))?;
-
+    let result: Result<Vec<u8>, SenuError> = async {
+        let mut file = sftp
+            .open(&path)
+            .await
+            .map_err(|e| SenuError::Sftp(format!("open \"{path}\": {e}")))?;
+        let mut content = Vec::new();
+        file.read_to_end(&mut content)
+            .await
+            .map_err(|e| SenuError::Sftp(format!("read \"{path}\": {e}")))?;
+        Ok(content)
+    }
+    .await;
+    let _ = sftp.close().await;
+    let content = result?;
     Ok(SftpReadResult { content, path })
 }
 
@@ -155,20 +181,25 @@ pub async fn sftp_write_file(
 ) -> Result<(), SenuError> {
     let sftp = open_sftp(&session_id, &sessions).await?;
 
-    let mut file = sftp
-        .create(&path)
-        .await
-        .map_err(|e| SenuError::Sftp(format!("create \"{path}\": {e}")))?;
-
-    file.write_all(&content)
-        .await
-        .map_err(|e| SenuError::Sftp(format!("write \"{path}\": {e}")))?;
-
-    file.flush()
-        .await
-        .map_err(|e| SenuError::Sftp(format!("flush \"{path}\": {e}")))?;
-
-    Ok(())
+    let result: Result<(), SenuError> = async {
+        let mut file = sftp
+            .create(&path)
+            .await
+            .map_err(|e| SenuError::Sftp(format!("create \"{path}\": {e}")))?;
+        file.write_all(&content)
+            .await
+            .map_err(|e| SenuError::Sftp(format!("write \"{path}\": {e}")))?;
+        file.flush()
+            .await
+            .map_err(|e| SenuError::Sftp(format!("flush \"{path}\": {e}")))?;
+        // Drop the file (closes its handle) BEFORE closing the SFTP session,
+        // otherwise the close races with pending file handles.
+        drop(file);
+        Ok(())
+    }
+    .await;
+    let _ = sftp.close().await;
+    result
 }
 
 /// Download a remote file via SFTP — shows a native save dialog.
@@ -209,15 +240,21 @@ pub async fn sftp_download_file(
 
     // 3. Read file content from remote via SFTP
     let sftp = open_sftp(&session_id, &sessions).await?;
-    let mut file = sftp
-        .open(&remote_path)
-        .await
-        .map_err(|e| SenuError::Sftp(format!("open \"{remote_path}\": {e}")))?;
-
-    let mut content = Vec::new();
-    file.read_to_end(&mut content)
-        .await
-        .map_err(|e| SenuError::Sftp(format!("read \"{remote_path}\": {e}")))?;
+    let result: Result<Vec<u8>, SenuError> = async {
+        let mut file = sftp
+            .open(&remote_path)
+            .await
+            .map_err(|e| SenuError::Sftp(format!("open \"{remote_path}\": {e}")))?;
+        let mut content = Vec::new();
+        file.read_to_end(&mut content)
+            .await
+            .map_err(|e| SenuError::Sftp(format!("read \"{remote_path}\": {e}")))?;
+        drop(file);
+        Ok(content)
+    }
+    .await;
+    let _ = sftp.close().await;
+    let content = result?;
 
     // 4. Write to local disk
     std::fs::write(&local_path, &content)?;
@@ -271,18 +308,23 @@ pub async fn sftp_upload_file(
 
     // 4. Write to remote via SFTP
     let sftp = open_sftp(&session_id, &sessions).await?;
-    let mut file = sftp
-        .create(&remote_path)
-        .await
-        .map_err(|e| SenuError::Sftp(format!("create \"{remote_path}\": {e}")))?;
-
-    file.write_all(&content)
-        .await
-        .map_err(|e| SenuError::Sftp(format!("write \"{remote_path}\": {e}")))?;
-
-    file.flush()
-        .await
-        .map_err(|e| SenuError::Sftp(format!("flush \"{remote_path}\": {e}")))?;
+    let result: Result<(), SenuError> = async {
+        let mut file = sftp
+            .create(&remote_path)
+            .await
+            .map_err(|e| SenuError::Sftp(format!("create \"{remote_path}\": {e}")))?;
+        file.write_all(&content)
+            .await
+            .map_err(|e| SenuError::Sftp(format!("write \"{remote_path}\": {e}")))?;
+        file.flush()
+            .await
+            .map_err(|e| SenuError::Sftp(format!("flush \"{remote_path}\": {e}")))?;
+        drop(file);
+        Ok(())
+    }
+    .await;
+    let _ = sftp.close().await;
+    result?;
 
     Ok(Some(filename))
 }

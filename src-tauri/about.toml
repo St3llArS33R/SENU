@@ -1,0 +1,35 @@
+# cargo-about config — controls which licenses are allowed to ship in
+# THIRD-PARTY-LICENSES.txt and which require manual review.
+#
+# Source: license audit, May 2026. All entries here are Apache-2.0 compatible.
+# If a new dependency introduces something not in this list, `cargo about`
+# fails the build — that's intentional, it forces a human to review the new
+# license before SENU bundles code under it.
+accepted = [
+    "Apache-2.0",
+    "MIT",
+    "MIT-0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "0BSD",
+    "CC0-1.0",
+    "Unlicense",
+    "MPL-2.0",   # weak copyleft — fine to bundle as long as the MPL files
+                 # remain swappable; we don't modify any of them.
+    "OFL-1.1",   # bundled font assets (IBM Plex / JetBrains Mono)
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "Apache-2.0 WITH LLVM-exception",  # used by target-lexicon (compiler infra)
+]
+
+# Targets we ship for. Limits the dependency walk so non-applicable
+# platforms' deps don't pollute the attribution file.
+targets = [
+    "x86_64-pc-windows-msvc",
+    "x86_64-unknown-linux-gnu",
+    "aarch64-apple-darwin",
+]
+
+# Add per-crate manual overrides as `[crates.<name>]` blocks if needed.

@@ -2,7 +2,8 @@
 name = "senu"
 version = "0.1.0"
 description = "SENU — Premium SSH terminal for security professionals"
-authors = ["SENU"]
+authors = ["Borys Zaitsev"]
+license = "Apache-2.0"
 edition = "2021"
 rust-version = "1.77"
 
@@ -23,6 +24,8 @@ tauri-plugin-store = "2"
 tauri-plugin-shell = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
 
 # SSH
 russh = "0.44"
@@ -43,10 +46,12 @@ uuid = { version = "1", features = ["v4"] }
 keyring = "3"
 zeroize = { version = "1", features = ["derive"] }
 
-# Crypto (for vault AES-256-GCM)
+# Crypto (notes AES-256-GCM and chat E2E)
 aes-gcm = "0.10"
-argon2 = "0.5"
 rand = "0.8"
+base64 = "0.22"
+x25519-dalek = { version = "2", features = ["static_secrets"] }
+ed25519-dalek = { version = "2", features = ["rand_core"] }
 
 # Error handling
 anyhow = "1"
@@ -67,6 +72,12 @@ bytes = "1"
 
 # Shell expansion (~/ paths)
 shellexpand = "3"
+
+# Local terminal / Docker PTY
+portable-pty = "0.8"
+
+# Serial port
+serialport = "4"
 
 [profile.release]
 opt-level = 3

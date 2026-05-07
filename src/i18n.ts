@@ -1,3 +1,19 @@
+// Copyright 2026 Borys Zaitsev
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// SPDX-License-Identifier: Apache-2.0
+
 // ─── SENU Internationalization ────────────────────────────────────────────────
 // Two languages: English (default) and Ukrainian.
 // Usage:
@@ -6,7 +22,7 @@
 
 import { createContext, useContext, useState, useCallback } from 'react'
 
-export type Lang = 'en' | 'uk'
+export type Lang = 'en' | 'uk' | 'de'
 
 // ─── Translation dictionary ────────────────────────────────────────────────────
 const T = {
@@ -32,10 +48,23 @@ const T = {
 
     // ── Server list / side panel ──────────────────────────────────────────────
     servers: 'Servers',
+    settings: 'Settings',
     noServers: 'No servers.\nClick + to add.',
     addServer: '+ Add Server',
     sftpBrowser: 'SFTP Browser',
     commandSnippets: 'Command Snippets',
+    logViewer: 'Log Viewer',
+    themes: 'Themes',
+    interfaceLanguage: 'Interface Language',
+    settingsSummary: 'Dedicated control view for theme and language in the new SENU UI.',
+    changeTheme: 'Change theme',
+    switchLanguage: 'Switch language',
+    revealConnection: 'Click to reveal',
+    hideConnection: 'Click to hide',
+    importSshConfig: 'Import from ~/.ssh/config',
+    importAction: 'Import',
+    terminalMode: 'Terminal',
+    editorMode: 'Editor',
 
     // ── Tab bar ───────────────────────────────────────────────────────────────
     newConnection: 'New connection (saved profile)',
@@ -148,6 +177,7 @@ const T = {
     upload: '↑ Upload',
     uploadTitle: 'Upload file to current directory',
     emptyDirectory: 'Empty directory',
+    createNoteFromFile: 'Create note from file',
     download: 'Download ',
     downloading: '⇅ Downloading ',
     uploading: '⇅ Uploading…',
@@ -261,6 +291,52 @@ const T = {
     shortcutSearchNotes: 'Filter notes by title or content',
     shortcutSectionGeneral: 'General',
     shortcutShowShortcuts: 'Show this shortcuts reference',
+
+    // ── Broadcast & Port Forwarding ───────────────────────────────────────────
+    broadcastOn: 'Broadcast input ON',
+    broadcastOff: 'Broadcast input OFF',
+    broadcastActive: 'Broadcasting to',
+    sessions: 'sessions',
+    portForwarding: 'Port Forwarding',
+    portForwardHint: 'Local port forwards: connections to 127.0.0.1:localPort are tunneled to the remote host.',
+    noForwards: 'No active port forwards',
+    addForward: 'Add new forward',
+    addForwardBtn: 'Add Forward',
+    localPort: 'Local Port',
+    remoteHost: 'Remote Host',
+    remotePort: 'Remote Port',
+    removeForward: 'Remove forward',
+    forwardInvalidParams: 'Please enter valid port numbers and a remote host.',
+    adding: 'Adding…',
+    activeTunnels: 'Active tunnels',
+    noActiveTunnels: 'No active tunnels',
+    copyAddress: 'Copy address',
+    copied: 'Copied',
+    cmdHistPlaceholder: 'Search command history…',
+    cmdHistEmpty: 'No commands recorded yet for this server.',
+    cmdHistSection: 'Recent commands',
+    cmdHistNavigate: 'navigate',
+    cmdHistInsert: 'insert',
+    cmdHistClose: 'close',
+    forwardAgentLabel: 'Forward SSH agent',
+    forwardAgentHint: 'Let the remote host use your local ssh-agent for further SSH hops (e.g. `git push`).',
+    // ── Connection types ─────────────────────────────────────────────────────
+    connTypeSSH: 'SSH',
+    connTypeTelnet: 'Telnet',
+    connTypeSerial: 'Serial',
+    connTypeLocal: 'Local Shell',
+    connTypeDocker: 'Docker',
+    serialPortLabel: 'Serial Port',
+    baudRateLabel: 'Baud Rate',
+    localShellLabel: 'Shell',
+    workingDirLabel: 'Working Directory (optional)',
+    dockerContainerLabel: 'Container',
+    dockerShellLabel: 'Shell',
+    noSerialPorts: 'No serial ports found',
+    noContainers: 'No running containers',
+    connTypeSelectLabel: 'Connection Type',
+    runAsAdmin: 'Run as Administrator',
+    runAsAdminHint: 'Opens a new elevated SENU window with this shell (Windows only)',
   },
 
   uk: {
@@ -285,10 +361,23 @@ const T = {
 
     // ── Список серверів ───────────────────────────────────────────────────────
     servers: 'Сервери',
+    settings: 'Налаштування',
     noServers: 'Серверів немає.\nНатисни + щоб додати.',
     addServer: '+ Додати сервер',
     sftpBrowser: 'SFTP Браузер',
     commandSnippets: 'Сніпети команд',
+    logViewer: 'Перегляд логів',
+    themes: 'Теми',
+    interfaceLanguage: 'Мова інтерфейсу',
+    settingsSummary: 'Окремий центр керування темою й мовою інтерфейсу в стилі нового SENU UI.',
+    changeTheme: 'Змінити тему',
+    switchLanguage: 'Змінити мову',
+    revealConnection: 'Показати',
+    hideConnection: 'Сховати',
+    importSshConfig: 'Імпорт з ~/.ssh/config',
+    importAction: 'Імпорт',
+    terminalMode: 'Термінал',
+    editorMode: 'Редактор',
 
     // ── Панель вкладок ────────────────────────────────────────────────────────
     newConnection: 'Нове підключення (збережений профіль)',
@@ -401,6 +490,7 @@ const T = {
     upload: '↑ Завантажити',
     uploadTitle: 'Завантажити файл в поточну директорію',
     emptyDirectory: 'Порожня директорія',
+    createNoteFromFile: 'Створити нотатку з файлу',
     download: 'Завантажити ',
     downloading: '⇅ Завантаження ',
     uploading: '⇅ Вивантаження…',
@@ -514,6 +604,364 @@ const T = {
     shortcutSearchNotes: 'Фільтрувати нотатки за заголовком або змістом',
     shortcutSectionGeneral: 'Загальне',
     shortcutShowShortcuts: 'Показати цей список гарячих клавіш',
+
+    // ── Трансляція та перенаправлення портів ──────────────────────────────────
+    broadcastOn: 'Режим трансляції УВІМКНЕНО',
+    broadcastOff: 'Режим трансляції ВИМКНЕНО',
+    broadcastActive: 'Трансляція до',
+    sessions: 'сесій',
+    portForwarding: 'Перенаправлення портів',
+    portForwardHint: 'Локальні форварди: підключення до 127.0.0.1:localPort тунелюються на віддалений хост.',
+    noForwards: 'Активних форвардів немає',
+    addForward: 'Новий форвард',
+    addForwardBtn: 'Додати форвард',
+    localPort: 'Локальний порт',
+    remoteHost: 'Хост',
+    remotePort: 'Порт',
+    removeForward: 'Видалити форвард',
+    forwardInvalidParams: 'Введіть коректні номери портів та адресу хоста.',
+    adding: 'Додаємо…',
+    activeTunnels: 'Активні тунелі',
+    noActiveTunnels: 'Активних тунелів немає',
+    copyAddress: 'Копіювати адресу',
+    copied: 'Скопійовано',
+    cmdHistPlaceholder: 'Пошук по історії команд…',
+    cmdHistEmpty: 'Для цього сервера ще немає збережених команд.',
+    cmdHistSection: 'Останні команди',
+    cmdHistNavigate: 'навігація',
+    cmdHistInsert: 'вставити',
+    cmdHistClose: 'закрити',
+    forwardAgentLabel: 'Прокидати SSH-agent',
+    forwardAgentHint: 'Дозволити віддаленому хосту користуватись твоїм локальним ssh-agent для подальших SSH-хопів (напр. `git push`).',
+    // ── Типи підключення ─────────────────────────────────────────────────────
+    connTypeSSH: 'SSH',
+    connTypeTelnet: 'Telnet',
+    connTypeSerial: 'Серіальний',
+    connTypeLocal: 'Локальний шел',
+    connTypeDocker: 'Docker',
+    serialPortLabel: 'Серіальний порт',
+    baudRateLabel: 'Швидкість (Baud)',
+    localShellLabel: 'Шел',
+    workingDirLabel: 'Робоча директорія (опц.)',
+    dockerContainerLabel: 'Контейнер',
+    dockerShellLabel: 'Шел',
+    noSerialPorts: 'Серіальні порти не знайдено',
+    noContainers: 'Запущених контейнерів немає',
+    connTypeSelectLabel: 'Тип підключення',
+    runAsAdmin: 'Запустити від адміністратора',
+    runAsAdminHint: 'Відкриває нове підвищене вікно SENU з цим шелом (лише Windows)',
+  },
+  de: {
+    // ── Fenstersteuerung ─────────────────────────────────────────────────────
+    minimize: 'Minimieren',
+    maximize: 'Maximieren',
+    close: 'Schließen',
+    keyboardShortcuts: 'Tastenkürzel (F1)',
+
+    // ── Allgemein ─────────────────────────────────────────────────────────────
+    save: 'Speichern',
+    cancel: 'Abbrechen',
+    connect: 'Verbinden',
+    delete: 'Löschen',
+    edit: 'Bearbeiten',
+    search: 'Suchen…',
+    clearSearch: 'Suche löschen',
+    noMatches: 'Keine Treffer',
+    loading: 'Laden…',
+    optional: '(optional)',
+    error: 'Fehler',
+
+    // ── Serverliste ───────────────────────────────────────────────────────────
+    servers: 'Server',
+    settings: 'Einstellungen',
+    noServers: 'Keine Server.\nKlicke + zum Hinzufügen.',
+    addServer: '+ Server hinzufügen',
+    sftpBrowser: 'SFTP-Browser',
+    commandSnippets: 'Befehlsschnipsel',
+    logViewer: 'Log Viewer',
+    themes: 'Themen',
+    interfaceLanguage: 'Sprache',
+    settingsSummary: 'Zentrale Ansicht für Theme- und Sprachumschaltung im neuen SENU-UI.',
+    changeTheme: 'Theme ändern',
+    switchLanguage: 'Sprache wechseln',
+    revealConnection: 'Einblenden',
+    hideConnection: 'Ausblenden',
+    importSshConfig: 'Aus ~/.ssh/config importieren',
+    importAction: 'Importieren',
+    terminalMode: 'Terminal',
+    editorMode: 'Editor',
+
+    // ── Tab-Leiste ────────────────────────────────────────────────────────────
+    newConnection: 'Neue Verbindung (gespeichertes Profil)',
+    quickConnectPlaceholder: 'user@host:port',
+    quickConnectTitle: 'Schnellverbindung (user@host:port)',
+    commandPaletteTitle: 'Befehlspalette (Ctrl+K)',
+    showAllTabs: 'Alle Tabs anzeigen',
+    reconnect: 'Neu verbinden',
+    toggleNotes: 'Notizen',
+    splitLayout: 'Geteilte Ansicht',
+    lockSplitter: 'Teiler sperren',
+    unlockSplitter: 'Teiler entsperren (zum Ändern ziehen)',
+
+    // ── Leerer Zustand ────────────────────────────────────────────────────────
+    appTagline: 'SSH-Terminal für alle, die weiter sehen',
+    quickConnect: 'Schnellverbindung',
+    newConnectionBtn: '+ Neue Verbindung',
+
+    // ── Geteilte Ansicht ──────────────────────────────────────────────────────
+    pane: 'Bereich',
+    clickToConnect: 'Server anklicken zum Verbinden',
+    connectBtn: '+ Verbinden',
+
+    // ── Verbindungsdialog ─────────────────────────────────────────────────────
+    editConnection: 'Verbindung bearbeiten',
+    newConnection2: 'Neue Verbindung',
+    fieldName: 'Name',
+    fieldHost: 'Host',
+    fieldPort: 'Port',
+    fieldUsername: 'Benutzername',
+    fieldPassword: 'Passwort',
+    fieldSshKey: 'Privater SSH-Schlüssel',
+    fieldPassphrase: 'Passphrase',
+    fieldColor: 'Farbe',
+    authPassword: 'Passwort',
+    authKey: 'SSH-Schlüssel',
+    authAgent: 'Agent',
+    placeholderName: 'Mein Server',
+    placeholderHost: '192.168.1.1',
+    placeholderUsername: 'root',
+    placeholderPassword: '••••••••',
+    placeholderKeyPath: '~/.ssh/id_ed25519',
+    placeholderPassphrase: 'Schlüssel-Passphrase',
+    passphraseOptional: 'Leer lassen falls nicht vorhanden',
+    encryptedKeyWarning: 'Dieser Schlüssel ist verschlüsselt — Passphrase eingeben oder Agent-Modus wählen.',
+    passphraseRequired: '* erforderlich',
+    passphraseIfEncrypted: '(falls Schlüssel verschlüsselt)',
+    agentFound: '✓ SSH-Agent gefunden',
+    agentNotFound: '✗ SSH-Agent nicht gefunden',
+    agentKeys: 'Schlüssel die bereits in Pageant oder OpenSSH-Agent gespeichert sind, werden automatisch verwendet.',
+    agentInstructions: 'OpenSSH Authentication Agent in services.msc starten oder Pageant öffnen…',
+    checkingAgent: 'Agent wird geprüft…',
+    saveAndConnect: 'Speichern & Verbinden',
+    saveOnly: 'Nur speichern',
+    proxyJump: 'ProxyJump (Sprunghost)',
+    jumpHostLabel: 'Sprunghost',
+    useProxyJump: 'ProxyJump verwenden',
+
+    // ── SSH-Schlüsselauswahl ──────────────────────────────────────────────────
+    chooseKeyFile: 'Schlüsseldatei wählen…',
+    generateKey: '✦ Generieren',
+    noKeysFound: 'Keine privaten Schlüssel in ~/.ssh gefunden',
+    keyType: 'Typ',
+    keyFilename: 'Dateiname',
+    keyPassphrase: 'Passphrase',
+    keyPassphrasePlaceholder: 'z.B. id_ed25519',
+    keyTypeEd25519: 'Ed25519 (empfohlen)',
+    keyTypeRsa: 'RSA 4096',
+    generateKeyPair: 'Schlüsselpaar generieren',
+    keyGenerated: '✓ Generiert: ',
+    keyGenError: '✗ Fehler: ',
+
+    // ── Notizen ───────────────────────────────────────────────────────────────
+    notes: 'Notizen',
+    exportNotes: 'Alle Notizen als Markdown exportieren',
+    newNote: 'Neue Notiz',
+    searchNotes: 'Notizen suchen…',
+    noNotes: 'Noch keine Notizen.\nKlicke + zum Hinzufügen.',
+    noNotesMatch: 'Keine Notizen für\n"',
+    editNote: 'Notiz bearbeiten',
+    newNoteTitle: 'Neue Notiz',
+    noteTitle: 'Titel',
+    noteContent: 'Inhalt',
+
+    // ── Schnipsel ─────────────────────────────────────────────────────────────
+    mySnippets: 'Meine Schnipsel',
+    library: 'Bibliothek',
+    searchSnippets: 'Suchen…',
+    noSnippets: 'Noch keine Schnipsel.\nKlicke + zum Erstellen.',
+    insertSnippet: 'Einfügen (ohne Enter)',
+    runSnippet: 'Ausführen (mit Enter)',
+    editSnippet: 'Bearbeiten',
+    deleteSnippet: 'Löschen',
+    editSnippetTitle: 'Schnipsel bearbeiten',
+    newSnippetTitle: 'Neuer Schnipsel',
+    snippetTitle: 'Titel',
+    snippetCommand: 'Befehl',
+    snippetDescription: 'Beschreibung',
+    snippetTitlePlaceholder: 'z.B. Nginx neustarten',
+    snippetCommandPlaceholder: 'z.B. systemctl restart nginx',
+    snippetDescPlaceholder: 'Kurze Beschreibung des Befehls',
+    saveToSnippets: 'In meine Schnipsel speichern',
+    newSnippetBtn: '+ Neuer Schnipsel',
+
+    // ── SFTP-Browser ──────────────────────────────────────────────────────────
+    sftpEmpty: 'Mit Server verbinden\num Dateien zu durchsuchen',
+    goUp: 'Nach oben',
+    copyPath: 'Pfad kopieren',
+    refresh: 'Aktualisieren',
+    upload: '↑ Hochladen',
+    uploadTitle: 'Datei in aktuelles Verzeichnis hochladen',
+    emptyDirectory: 'Leeres Verzeichnis',
+    createNoteFromFile: 'Notiz aus Datei erstellen',
+    download: 'Herunterladen ',
+    downloading: '⇅ Herunterladen ',
+    uploading: '⇅ Hochladen…',
+
+    // ── Terminal ──────────────────────────────────────────────────────────────
+    searchTerminal: 'Im Terminal suchen…',
+    prevMatch: 'Vorheriger (Shift+Enter)',
+    nextMatch: 'Nächster (Enter)',
+    closeSearch: 'Suche schließen',
+    stopLogging: 'Aufzeichnung stoppen',
+    startLogging: '⏺ Aufzeichnung starten',
+    stopLoggingMenu: '■ Aufzeichnung stoppen',
+    copyText: '⎘ Kopieren',
+    pasteText: '⏎ Einfügen',
+    findInTerminal: '🔍 Suchen',
+    clearTerminal: '✕ Terminal leeren',
+
+    // ── Terminal-Meldungen ────────────────────────────────────────────────────
+    connecting: 'Verbinde mit ',
+    stillConnecting: '⏳ Verbindung läuft… (auth.log auf dem Server prüfen)',
+    connectionClosed: 'Verbindung getrennt.',
+    pressRToReconnect: 'R drücken zum Neu verbinden',
+    connectionError: '✗ Fehler: ',
+    closeTryAgain: 'Tab schließen und erneut versuchen.',
+    reconnecting: '↻ Neu verbinden mit ',
+    reconnectingIn: '↻ Verbindung unterbrochen. Neu verbinden in ',
+    reconnectAttempt: ' (Versuch ',
+    reconnectGaveUp: '✗ Automatisches Neu verbinden nach 5 Versuchen aufgegeben. ↻ drücken für manuellen Versuch.',
+    pressXToClose: '× auf dem Tab drücken zum Schließen.',
+
+    // ── Statusleiste ──────────────────────────────────────────────────────────
+    noActiveConnection: 'Keine aktive Verbindung',
+    statusConnected: 'VERBUNDEN',
+    statusConnecting: 'VERBINDE',
+    statusDisconnected: 'GETRENNT',
+    statusError: 'FEHLER',
+    langToggle: 'EN',
+
+    // ── Host-Key-Dialog ───────────────────────────────────────────────────────
+    hostKeyChanged: '⚠ Host-Schlüssel geändert!',
+    unknownHost: '🔐 Unbekannter Host',
+    hostKeyChangedWarning: 'WARNUNG: Der Host-Schlüssel für ',
+    hostKeyChangedWarning2: ' hat sich geändert!',
+    hostKeyChangedDetail: 'Dies könnte auf einen Man-in-the-Middle-Angriff hinweisen oder der Server wurde neu installiert. Bitte mit dem Systemadministrator prüfen.',
+    hostKeyNewInfo: 'Verbinde mit ',
+    hostKeyNewInfo2: ' zum ersten Mal.',
+    hostKeyType: 'Schlüsseltyp',
+    hostKeyFingerprint: 'Fingerabdruck',
+    hostKeyRemember: 'Zu ~/.ssh/known_hosts hinzufügen',
+    hostKeyReject: 'Ablehnen',
+    hostKeyTrust: 'Vertrauen & Verbinden',
+
+    // ── Befehlspalette ────────────────────────────────────────────────────────
+    palettePlaceholder: 'Server, Aktionen, Layouts suchen…',
+    paletteNoResults: 'Keine Ergebnisse für "',
+    paletteSectionSessions: 'Offene Sitzungen',
+    paletteSectionConnect: 'Verbinden mit',
+    paletteSectionLayout: 'Layout',
+    paletteSectionActions: 'Aktionen',
+    layoutSingle: 'Einzelner Bereich',
+    layout2col: '2 Spalten',
+    layout2row: '2 Zeilen',
+    layout2x2: '2×2 Raster',
+    layout3x2: '3×2 Raster',
+    layout4x2: '4×2 Raster',
+    actionToggleNotes: 'Notizbereich',
+    actionToggleNotesDesc: 'Rechten Bereich ein-/ausblenden',
+    actionToggleSidebar: 'Serverbereich',
+    actionToggleSidebarDesc: 'Linken Bereich ein-/ausblenden',
+    actionNewConnection: 'Neue Verbindung…',
+    actionNewConnectionDesc: 'Verbindungsdialog öffnen',
+
+    // ── Update-Leiste ─────────────────────────────────────────────────────────
+    updateAvailable: '⬆ Update verfügbar: v',
+    updateDownload: 'Herunterladen',
+    updateDownloading: '⬇ Update wird heruntergeladen… ',
+    updateReady: '✓ Update v',
+    updateReadySuffix: ' bereit — neu starten zum Anwenden',
+    updateRestart: 'Neu starten & Aktualisieren',
+    updateLater: 'Später',
+    updateError: '⚠ Update-Fehler: ',
+
+    // ── Gruppenmodal ──────────────────────────────────────────────────────────
+    newGroup: 'Neue Gruppe',
+    groupName: 'Gruppenname',
+    groupNamePlaceholder: 'z.B. Produktion, Recon, Kunde A',
+    groupColor: 'Farbe',
+    groupCreate: 'Erstellen',
+
+    // ── Tab-Kontextmenü ───────────────────────────────────────────────────────
+    groups: 'Gruppen',
+    newGroupMenu: 'Neue Gruppe…',
+    removeFromGroup: 'Aus Gruppe entfernen',
+    closeTab: 'Tab schließen',
+
+    // ── Tastenkürzel-Modal ────────────────────────────────────────────────────
+    shortcutsTitle: '⌨ Tastenkürzel',
+    shortcutSectionTerminal: 'Terminal',
+    shortcutCopy: 'Ausgewählten Text kopieren',
+    shortcutPaste: 'Aus Zwischenablage einfügen',
+    shortcutRightClick: 'Kopieren / Einfügen',
+    shortcutReconnect: 'Neu verbinden (bei Trennung)',
+    shortcutSectionEditor: 'Editor',
+    shortcutSave: 'Datei auf Server speichern',
+    shortcutSectionSnippets: 'Schnipsel',
+    shortcutInsert: 'Befehl ohne Enter senden',
+    shortcutRun: 'Befehl + Enter senden (ausführen)',
+    shortcutSectionNotes: 'Notizen',
+    shortcutNewNote: 'Neue Notiz',
+    shortcutEditNote: 'Notiz bearbeiten',
+    shortcutSearchNotes: 'Notizen nach Titel oder Inhalt filtern',
+    shortcutSectionGeneral: 'Allgemein',
+    shortcutShowShortcuts: 'Diese Übersicht anzeigen',
+
+    // ── Broadcast & Port-Weiterleitung ────────────────────────────────────────
+    broadcastOn: 'Broadcast-Eingabe EIN',
+    broadcastOff: 'Broadcast-Eingabe AUS',
+    broadcastActive: 'Überträgt an',
+    sessions: 'Sitzungen',
+    portForwarding: 'Port-Weiterleitung',
+    portForwardHint: 'Lokale Port-Weiterleitungen: Verbindungen zu 127.0.0.1:localPort werden über SSH getunnelt.',
+    noForwards: 'Keine aktiven Port-Weiterleitungen',
+    addForward: 'Neue Weiterleitung',
+    addForwardBtn: 'Weiterleitung hinzufügen',
+    localPort: 'Lokaler Port',
+    remoteHost: 'Remote-Host',
+    remotePort: 'Remote-Port',
+    removeForward: 'Weiterleitung entfernen',
+    forwardInvalidParams: 'Bitte gültige Portnummern und einen Remote-Host eingeben.',
+    adding: 'Hinzufügen…',
+    activeTunnels: 'Aktive Tunnel',
+    noActiveTunnels: 'Keine aktiven Tunnel',
+    copyAddress: 'Adresse kopieren',
+    copied: 'Kopiert',
+    cmdHistPlaceholder: 'Befehlsverlauf durchsuchen…',
+    cmdHistEmpty: 'Für diesen Server sind noch keine Befehle gespeichert.',
+    cmdHistSection: 'Letzte Befehle',
+    cmdHistNavigate: 'Navigieren',
+    cmdHistInsert: 'einfügen',
+    cmdHistClose: 'schließen',
+    forwardAgentLabel: 'SSH-Agent weiterleiten',
+    forwardAgentHint: 'Erlaubt dem Remote-Host, deinen lokalen ssh-agent für weitere SSH-Verbindungen (z. B. `git push`) zu nutzen.',
+    // ── Verbindungstypen ─────────────────────────────────────────────────────
+    connTypeSSH: 'SSH',
+    connTypeTelnet: 'Telnet',
+    connTypeSerial: 'Seriell',
+    connTypeLocal: 'Lokale Shell',
+    connTypeDocker: 'Docker',
+    serialPortLabel: 'Serieller Port',
+    baudRateLabel: 'Baudrate',
+    localShellLabel: 'Shell',
+    workingDirLabel: 'Arbeitsverzeichnis (optional)',
+    dockerContainerLabel: 'Container',
+    dockerShellLabel: 'Shell',
+    noSerialPorts: 'Keine seriellen Ports gefunden',
+    noContainers: 'Keine laufenden Container',
+    connTypeSelectLabel: 'Verbindungstyp',
+    runAsAdmin: 'Als Administrator ausführen',
+    runAsAdminHint: 'Öffnet ein neues erhöhtes SENU-Fenster mit dieser Shell (nur Windows)',
   },
 } as const
 
@@ -545,6 +993,7 @@ const STORAGE_KEY = 'senu_lang'
 export function useLangState(): LangContextValue {
   const saved = (localStorage.getItem(STORAGE_KEY) ?? 'en') as Lang
   const [lang, setLangState] = useState<Lang>(saved)
+
 
   const setLang = useCallback((l: Lang) => {
     localStorage.setItem(STORAGE_KEY, l)
